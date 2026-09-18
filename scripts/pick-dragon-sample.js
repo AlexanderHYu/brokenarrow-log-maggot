@@ -1,6 +1,7 @@
 // 从已缓存的对局里按 ELO 分层挑建模样本（不发请求）
 // 输出 backtest-data/sample-players.txt（玩家分析 + 2 页最近对局）和 sample-matches.txt（单局原始数据）
 // 用法：node scripts/pick-dragon-sample.js [每档玩家数=30] [每档对局数=45]
+// 加采：把数字调大再跑一次，已经下载过的玩家/对局会先算进去，只补差额
 const fs = require('fs');
 const path = require('path');
 const DIR = path.join(__dirname, '..', 'backtest-data');
@@ -54,9 +55,15 @@ byBand.forEach((ids, b) => {
   pick.push(...take);
   bandInfo.push(BANDS[b] + '~' + BANDS[b + 1] + ': 池 ' + ids.length + ' 人，已有 ' + have + '，新挑 ' + take.length);
 });
-// 对局：按全场平均 ELO 分档，每档随机挑
+// 对局：按全场平均 ELO 分档；已经下载过单局数据的先算上，再随机补足到每档 perBandM 局（加采时不浪费已有数据）
 const mPick = [];
-BANDS.slice(0, -1).forEach((_, b) => mPick.push(...shuffle(matchList.filter((m) => band(m.avg) === b)).slice(0, perBandM).map((m) => m.id)));
+const haveM = (id) => fs.existsSync(path.join(DIR, 'm-' + id + '.json'));
+BANDS.slice(0, -1).forEach((_, b) => {
+  const inBand = matchList.filter((m) => band(m.avg) === b);
+  const old = inBand.filter((m) => haveM(m.id));
+  const add = shuffle(inBand.filter((m) => !haveM(m.id))).slice(0, Math.max(0, perBandM - old.length));
+  mPick.push(...old.concat(add).map((m) => m.id));
+});
 fs.writeFileSync(path.join(DIR, 'sample-players.txt'), pick.join('\n'));
 fs.writeFileSync(path.join(DIR, 'sample-matches.txt'), mPick.join('\n'));
 console.log(bandInfo.join('\n'));

@@ -1,5 +1,8 @@
 // 龙区分建模：用 backtest-data/ 里的真实数据估计 src/dragonModel.json 里的全部参数
 // 用法：node scripts/fit-dragon-model.js [--write]     不带 --write 只打印诊断
+// 环境变量：CUTOFF=2026-09-02（只用这天北京时间 0 点之后的对局；9/1 大版本更新，之前的数据不要）
+//          MATCH_SAMPLE=random（默认：单局部分只用随机抽的对局号）/ all
+//          PLAYER_SAMPLE=all（默认：玩家部分用所有有两页最近对局的玩家）/ random（只用从随机对局里抽的玩家，数据够了再切）
 // 不发任何请求；数据由 scripts/collect-dragon-data.js 采集。
 const fs = require('fs');
 const path = require('path');
@@ -13,6 +16,14 @@ const NOGAP = process.env.NOGAP === '1';
 const log = (...a) => console.log(...a);
 const J = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'));
 const files = fs.readdirSync(DIR);
+const CUTOFF = Date.parse((process.env.CUTOFF || '2026-09-02') + 'T00:00:00+08:00') / 1000;
+const MATCH_SAMPLE = process.env.MATCH_SAMPLE === 'all' ? 'all' : 'random';
+const PLAYER_SAMPLE = process.env.PLAYER_SAMPLE === 'random' ? 'random' : 'all';
+const after = (endTime) => (Number(endTime) || 0) >= CUTOFF;
+const listFile = (f) => (fs.existsSync(path.join(DIR, f)) ? fs.readFileSync(path.join(DIR, f), 'utf8').split(/\r?\n/).filter(Boolean) : []);
+// 随机样本：随机抽的对局号（random-ids-*.txt）、从随机对局里抽的玩家（sample-random-players.txt）
+const randomMatchIds = new Set(files.filter((f) => /^random-ids-\d+\.txt$/.test(f)).flatMap(listFile));
+const randomPlayers = new Set(listFile('sample-random-players.txt'));
 
 // ---------- 小工具 ----------
 const mean = (a) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
@@ -62,11 +73,14 @@ const unitLib = J('units.json').units;
 const unitMap = DS.buildUnitMap(unitLib);
 const unitCat = Object.fromEntries(unitLib.map((u) => [u.id, u.category_type]));
 const pmById = new Map();
-for (const f of files) if (/^pm-\d+-o\d+\.json$/.test(f)) for (const x of J(f).matches || []) pmById.set(String(x.matchId), x);
+for (const f of files) if (/^pm-\d+-o\d+\.json$/.test(f)) for (const x of J(f).matches || []) if (after((x.data || {}).EndTime)) pmById.set(String(x.matchId), x);
 const apById = new Map();
-for (const f of files) { const m = /^ap-(\d+)\.json$/.exec(f); if (m) { const a = J(f); apById.set(m[1], a.data || a); } }
+for (const f of files) { const m = /^ap-(\d+)\.json$/.exec(f); if (m && (PLAYER_SAMPLE === 'all' || randomPlayers.has(m[1]))) { const a = J(f); apById.set(m[1], a.data || a); } }
+// 单局数据只用 5v5 排位（随机抽的号里还有自定义、1v1、2v2 等，会把称号门槛带偏）
+const isRanked5v5 = (mi) => { const all = Object.values(mi.Data || {}).filter((p) => DS.teamOf(p) === 0 || DS.teamOf(p) === 1); return all.length === 10 && all.filter((p) => DS.teamOf(p) === 0).length === 5 && all.every(DS.isRated); };
 const mById = new Map();
-for (const f of files) { const m = /^m-(\d+)\.json$/.exec(f); if (m) { const a = J(f); const mi = a.matchInfo || (a.data && a.data.matchInfo) || a; if (mi && mi.Data) mById.set(m[1], mi); } }
+for (const f of files) { const m = /^m-(\d+)\.json$/.exec(f); if (m && (MATCH_SAMPLE === 'all' || randomMatchIds.has(m[1]))) { const a = J(f); const mi = a.matchInfo || (a.data && a.data.matchInfo) || a; if (mi && mi.Data && after(mi.EndTime) && isRanked5v5(mi)) mById.set(m[1], mi); } }
+log('样本：单局部分 ' + (MATCH_SAMPLE === 'random' ? '随机对局' : '全部对局') + '，玩家部分 ' + (PLAYER_SAMPLE === 'random' ? '随机玩家' : '全部玩家（按 ELO 档人数加权）') + '；只用 ' + (process.env.CUTOFF || '2026-09-02') + ' 北京时间 0 点之后的对局');
 log('数据：最近对局 ' + pmById.size + ' 局；玩家分析 ' + apById.size + ' 人；单局原始数据 ' + mById.size + ' 局');
 
 // ---------- 0. 花费类别 → 角色的拆分比例、全体平均角色构成（单局单位数据） ----------
@@ -151,7 +165,7 @@ for (const [id] of apById) {
   for (const off of [0, 20]) {
     const f = 'pm-' + id + '-o' + off + '.json';
     if (!files.includes(f)) continue;
-    for (const x of J(f).matches || []) own.push(x);
+    for (const x of J(f).matches || []) if (after((x.data || {}).EndTime)) own.push(x);
   }
   const rows = [];
   for (const x of own) rows.push(...rowsFromMatch(x, [id], () => careerRoles.get(id), 'career'));
@@ -392,7 +406,8 @@ function wquantiles(items, n = 101) {
   for (let j = 0; j < n; j++) { const target = (j / (n - 1)) * tot; while (i < s.length - 1 && acc + s[i].w < target) { acc += s[i].w; i++; } out.push(s[i].v); }
   return out;
 }
-const playerPct = wquantiles(players.map((p) => ({ v: p.m, w: sampleCount[p.band] ? poolCount[p.band] / sampleCount[p.band] : 0 }))).map((v) => Math.round(v * 10000) / 10000);
+// 随机样本本身就代表全体（按出场次数加权），不用再加权；滚雪球样本按各 ELO 档人数还原
+const playerPct = wquantiles(players.map((p) => ({ v: p.m, w: PLAYER_SAMPLE === 'random' ? 1 : (sampleCount[p.band] ? poolCount[p.band] / sampleCount[p.band] : 0) }))).map((v) => Math.round(v * 10000) / 10000);
 log('\n[玩家分布] ' + players.length + ' 人（各 ELO 档样本 ' + sampleCount.join('/') + '，对局池 ' + poolCount.join('/') + '）');
 
 // ---------- 7. 称号：占 1 个点值多少分、各「突出表现」称号的阈值 ----------
@@ -452,7 +467,7 @@ const titleFreq = {};
 const model = {
   version: 2,
   fittedAt: new Date().toISOString().slice(0, 10),
-  sample: { pmMatches: pmById.size, players: apById.size, rawMatches: mById.size, matchRows: matchRows.length, careerRows: careerRows.length, backtestPlayers: bestAgg.bt.n },
+  sample: { matchSample: MATCH_SAMPLE, playerSample: PLAYER_SAMPLE, cutoff: new Date(CUTOFF * 1000).toISOString(), pmMatches: pmById.size, players: apById.size, rawMatches: mById.size, matchRows: matchRows.length, careerRows: careerRows.length, backtestPlayers: bestAgg.bt.n },
   expect: expectCfg,
   units: unitMap,
   catSplit,
