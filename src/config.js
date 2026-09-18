@@ -17,8 +17,6 @@ const DEFAULTS = {
   inputHookEnabled: false,
   // 24 小时 API 调用配额上限（超过后当天不再请求）
   apiDailyLimit: 400,
-  // 心跳统计（匿名 ID + 版本号；作者自建服务器，可在设置里关闭）
-  heartbeatEnabled: true,
   // 界面主题：dark / light / cyan / orange
   theme: 'dark',
   // 界面语言：zh / en / ja / ru（核心界面四语）
@@ -33,7 +31,6 @@ const DEFAULTS = {
   banCardVisible: false,
   // 多账号联动羁绊检查：换号也视为同一人，所有本机账号的对局都计入调查统计（默认开）
   multiAccountBond: true,
-  heartbeatUrl: 'https://brokenarrow.zolahere.top',
   // 玩家报告使用的近期对局页数（每页 5 局）
   reportMatchPages: 4,
   // 最爱单位统计使用的最新对局数
@@ -42,9 +39,10 @@ const DEFAULTS = {
   replayEnabled: false, // 行车记录仪默认关闭，用户在「行车记录仪」卡片右上角开启（开启时若多屏会让用户选游戏所在显示器）
   replayDisplayId: '',   // 用户选择的游戏所在显示器 display_id
 
-  replayQuality: 720,     // 分辨率：240 / 360 / 480 / 720 / 1080（默认 720p；录像设置滑块可改）
+  replayQuality: 1080,    // 分辨率：0=原生 / 720 / 1080 / 1440（默认 1080p）
   replayFps: 30,          // 帧数：30～60（默认 30）
-  replayBitrateMbps: 5,   // 画质码率（Mbps）：3～10 整数（默认 5）
+  replayBitrateMbps: 8,   // 画质码率（Mbps）：3～40 整数（默认 8）
+  replayExposure: 0,      // 曝光补偿（EV）：-2～+2，步长 0.25（录像偏暗/偏亮时调）
   replayAudio: 'default',  // 录音：'off' 关闭 / 'default' 系统默认声卡（桌面音频回环）
   replaySaveDir: '',       // 录像保存目录（空=默认 %APPDATA%/broken-arrow-log-assistant/replays）
 
@@ -65,19 +63,24 @@ const COMMON_STEAM_ROOTS = [
   'F:\\Steam'
 ];
 
-// 录像参数归一化：分辨率只认主流档位；帧数夹到 30～60；码率夹到 3～10（旧设置自动收敛）
-const REPLAY_QUALITIES = [240, 360, 480, 720, 1080];
+// 录像参数归一化（与 renderer/recSettingsCore.js 一致）：分辨率 0=原生/720/1080/1440；帧数 30～60；码率 3～40（旧设置自动收敛）
+const REPLAY_QUALITIES = [0, 720, 1080, 1440];
 function normReplayQuality(q) {
   const n = Number(q);
-  return REPLAY_QUALITIES.includes(n) ? n : 720;
+  if (REPLAY_QUALITIES.includes(n)) return n;
+  return n > 0 && n < 1080 ? 720 : 1080;
 }
 function normReplayFps(f) {
   const n = Number(f);
   return Number.isFinite(n) ? Math.min(60, Math.max(30, Math.round(n))) : 30;
 }
+function normReplayExposure(e) {
+  const n = Number(e);
+  return Number.isFinite(n) ? Math.max(-2, Math.min(2, Math.round(n * 4) / 4)) : 0;
+}
 function normReplayBitrate(b) {
   const n = Number(b);
-  return Number.isFinite(n) ? Math.min(10, Math.max(3, Math.round(n))) : 5;
+  return Number.isFinite(n) ? Math.min(40, Math.max(3, Math.round(n))) : 8;
 }
 
 // 从 steam 库配置文件中读取所有库路径
@@ -136,6 +139,7 @@ class Config {
         this.data.replayQuality = normReplayQuality(this.data.replayQuality);
         this.data.replayFps = normReplayFps(this.data.replayFps);
         this.data.replayBitrateMbps = normReplayBitrate(this.data.replayBitrateMbps);
+        this.data.replayExposure = normReplayExposure(this.data.replayExposure);
         this.data.replayAudio = (this.data.replayAudio === 'off' || this.data.replayAudio === 'default') ? this.data.replayAudio : 'default';
         this.data.replaySaveDir = typeof this.data.replaySaveDir === 'string' ? this.data.replaySaveDir : '';
       }
@@ -163,11 +167,12 @@ class Config {
     this.data.apiDailyLimit = DEFAULTS.apiDailyLimit; // 固定配额
     this.data.pollMs = DEFAULTS.pollMs;
     this.data.apiDelayMs = DEFAULTS.apiDelayMs;
-    this.data.heartbeatUrl = DEFAULTS.heartbeatUrl;
-    this.data.heartbeatEnabled = true;
+    delete this.data.heartbeatUrl;
+    delete this.data.heartbeatEnabled;
     this.data.replayQuality = normReplayQuality(this.data.replayQuality);
     this.data.replayFps = normReplayFps(this.data.replayFps);
     this.data.replayBitrateMbps = normReplayBitrate(this.data.replayBitrateMbps);
+    this.data.replayExposure = normReplayExposure(this.data.replayExposure);
     this.data.replayAudio = (this.data.replayAudio === 'off' || this.data.replayAudio === 'default') ? this.data.replayAudio : 'default';
     this.data.replaySaveDir = typeof this.data.replaySaveDir === 'string' ? this.data.replaySaveDir : '';
     this.save();

@@ -37,11 +37,25 @@ function registerStubIpc() {
   handle('api:health', () => ({ state: 'ok', checks: [{ path: '/api/units', label: '单位库', ok: true, ms: 80 }], at: Date.now(), okCount: 4, total: 4 }));
   handle('heartbeat:ping', () => null);
   handle('app:version', () => null);
-  handle('report:maggot', async () => {
-    if (winRef) winRef.webContents.send('maggot:progress', { done: 1, total: 12, scanned: 1, of: 12 });
+  handle('report:dragon', async () => {
     await new Promise((r) => setTimeout(r, 120));
-    return { maggotIndex: 3.5, calls: 1, name: 'Zola', stbid: '8863', trend: [], tags: [], units: [], refs: [] };
+    return {
+      stbid: '8863', value: 7.4, tier: 'solid', confidence: 0.8, matchCount: 20, calls: 1,
+      range: [6.6, 8.1],
+      roles: { armor: 35, inf: 20, recon: 5, arty: 15, aa: 10, heli: 5, jet: 10, known: true },
+      parts: { kd: 0.62, contrib: 0.58, obj: 0.51, outcome: 0.6 },
+      summary: { kdMedian: 1.5, contribMedian: 1.1, objMedian: 1, avgExpected: 0.5, winRate: 0.65 },
+      reasons: [{ key: 'overperform', weight: 0.45, params: { win: 65, exp: 50 } }, { key: 'kdLowSupport', weight: -0.6, params: { kd: '0.80', p: 22 } }],
+      rows: [{ fid: '8422864', map: 'Baltiisk', minutes: 31, won: true, expected: 0.48, kd: 1.7, contrib: 1.3, obj: 0.9, eloDelta: 12.3, score: 7.6, mark: 'dragon', conscript: false }]
+    };
   });
+  handle('match:review', () => ({
+    fid: '8049993', winnerTeam: 0, rated: true,
+    players: [
+      { id: '8863', name: 'Zola', teamId: 0, score: 7.8, mark: 'dragon', mvp: true, titles: [{ id: 'carry', kind: 'good', params: { d: 7000, l: 2500, net: 4500 } }] },
+      { id: '999', name: 'X', teamId: 1, score: 3.1, mark: 'qu', blame: true, afk: true, titles: [{ id: 'deserter', kind: 'bad', params: { min: 12 } }] }
+    ]
+  }));
   handle('match:queryRoster', () => true);
   handle('tracker:profile', (e, id) => {
     if (String(id) === '999') {
@@ -77,7 +91,8 @@ function registerStubIpc() {
   handle('replay:localList', () => ({ list: [{ id: '8028345__8863__Zola__100__11__1700000000000__5a6f6c61.webm', fid: '8028345', map: 'Airport', mapId: 11, uploaderId: '8863', uploaderName: 'Zola', teamId: 100, size: 2048, createdAt: Date.now() - 200000, localPath: '(桩)' }, { id: '8049993__8863__Zola__1__22__1700000000000__5a6f6c61.webm', fid: '8049993', map: 'Ignalina Powerplant', mapId: 22, uploaderId: '8863', uploaderName: 'Zola', teamId: 1, size: 1024, createdAt: Date.now() - 1000, localPath: '(桩)' }] }));
   handle('replay:localDelete', () => ({ ok: true, message: '已删除本地录像' }));
   handle('replay:localClean', () => ({ ok: true, removed: 2 }));
-  handle('replay:localRead', () => ({ ok: true, data: new ArrayBuffer(8), size: 8 }));
+  handle('replay:prepare', () => ({ ok: true, url: 'replay://local/smoke.mp4' }));
+  handle('replay:openExternal', () => ({ ok: true }));
   handle('replay:openLocalFolder', () => true);
   handle('replay:dirInfo', () => ({ ok: true, dir: 'C:\\smoke-replays', count: 2 }));
   handle('replay:testRecord', () => ({ ok: true, message: '开始录制' }));
@@ -147,7 +162,10 @@ app.whenReady().then(async () => {
         await new Promise((r) => setTimeout(r, 500));
         out.matchHasRadar = !!document.getElementById('matchGame');
         out.mdHeader = (document.querySelector('.md-table thead') || {}).textContent || '';
-        out.mdEloCell = (document.querySelectorAll('.md-table tbody tr td')[2] || {}).textContent || '';
+        out.mdEloCell = (document.querySelectorAll('.md-table tbody tr td')[3] || {}).textContent || '';
+        out.mdDragonFilled = !!document.querySelector('.md-table td.md-dragon .dg-mark');
+        out.mdTitles = [...document.querySelectorAll('.md-table td.md-dragon .dg-tag')].map((x) => x.className.replace('dg-tag ', '') + ':' + x.textContent + '|' + x.title).join(' ; ');
+        out.mdReviewNote = (document.getElementById('mdReviewNote') || {}).textContent || '';
         out.mdEloShowsValue = out.mdEloCell.trim().length > 0 && out.mdEloCell.indexOf('(') >= 0;
         out.mdHasSupply = (document.querySelector('.md-table thead') || {}).textContent.indexOf('补给') >= 0;
         out.mdLayout = (function () {
@@ -216,7 +234,7 @@ app.whenReady().then(async () => {
         document.getElementById('btnRecSettings').click();
         await new Promise((r) => setTimeout(r, 300));
         out.recModalOpened = !(document.getElementById('recSettingsModal') || {}).classList.contains('hidden');
-        out.recFields = !!document.getElementById('recDisplay') && !!document.getElementById('recQualityRange') && !!document.getElementById('recFpsRange') && !!document.getElementById('recBitrateRange') && !!document.getElementById('recQualityVal') && !!document.getElementById('recFpsVal') && !!document.getElementById('recBitrateVal') && !!document.getElementById('recEstSize') && !!document.getElementById('recAudio') && !!document.getElementById('recSaveDir');
+        out.recFields = !!document.getElementById('recDisplay') && !!document.getElementById('recQuality') && !!document.getElementById('recFpsRange') && !!document.getElementById('recBitrateRange') && !!document.getElementById('recFpsVal') && !!document.getElementById('recBitrateVal') && !!document.getElementById('recEstSize') && !!document.getElementById('recAudio') && !!document.getElementById('recSaveDir');
         out.recDisplayOptions = (document.getElementById('recDisplay') || {}).options ? document.getElementById('recDisplay').options.length : 0;
         out.recSliderDefaults = (function () {
           const q = document.getElementById('recQualityRange');
@@ -266,20 +284,23 @@ app.whenReady().then(async () => {
         out.noConfirmApi = typeof window.api.confirmUpload !== 'function' && typeof window.api.onConfirmUpload !== 'function';
         out.hasTestRecord = !!document.getElementById('btnTestRecord') && typeof window.api.testRecord === 'function';
         out.hasNewReplayApi = typeof window.api.selectReplaySaveDir === 'function' && typeof window.api.setReplaySaveDir === 'function' && typeof window.api.moveReplays === 'function' && typeof window.api.getScreenThumbnail === 'function';
-        // 查蛆指数：点击后按钮禁用 + 进度行可见 → 完成恢复 + 进度行隐藏
+        // 查龙区分：点击后按钮禁用 → 完成恢复并渲染面板（分数、分档、龙/区/泯标记、原因）
         lastReport = { id: '8863', name: 'Zola' }; // app.js 全局变量，模拟已选玩家
-        const maggotBtn = document.getElementById('btnMaggot');
-        maggotBtn.click();
-        await new Promise((r) => setTimeout(r, 60));
-        out.maggotBusy = maggotBtn.disabled === true;
-        out.maggotProgressVisible = !(document.getElementById('maggotProgressRow') || {}).classList.contains('hidden');
-        out.maggotProgressText = (document.getElementById('maggotProgressText') || {}).textContent || '';
-        out.maggotProgressBarW = (document.getElementById('maggotProgressBar') || {}).style.width || '';
-        out.maggotProgressPct = (document.getElementById('maggotProgressPct') || {}).textContent || '';
-        out.maggotOtherBtnsBusy = document.getElementById('btnMaggotFromReport') && document.getElementById('btnMaggotFromReport').disabled === true;
+        const dragonBtn = document.getElementById('btnDragon');
+        dragonBtn.click();
+        await new Promise((r) => setTimeout(r, 40));
+        out.dragonBusy = dragonBtn.disabled === true;
         await new Promise((r) => setTimeout(r, 400));
-        out.maggotDone = maggotBtn.disabled === false;
-        out.maggotProgressHiddenAfter = (document.getElementById('maggotProgressRow') || {}).classList.contains('hidden');
+        out.dragonDone = dragonBtn.disabled === false;
+        const dp = document.querySelector('#dragonArea .dragon-panel');
+        out.dragonPanel = !!dp;
+        out.dragonScoreText = dp ? (dp.querySelector('.mg-num') || {}).textContent : '';
+        out.dragonMarkShown = !!(dp && dp.querySelector('.dg-mark.dragon'));
+        out.dragonReasons = dp ? dp.querySelectorAll('.dg-reasons li').length : 0;
+        out.dragonRangeBar = !!(dp && dp.querySelector('.dg-range'));
+        out.titleI18nOk = I18N.t('title.weightlifter') === '举重冠军' && /第 12 分钟/.test(I18N.t('title.deserter.tip', { min: 12 }));
+        out.dragonRolesText = dp ? ([...dp.querySelectorAll('.mg-meta .dim')].map((x) => x.textContent).find((t) => /角色|Role/.test(t)) || '') : '';
+        out.noMaggotLeft = !document.getElementById('btnMaggot') && !document.getElementById('maggotArea');
         // 顶栏心跳无「经代理」文案
         out.noProxyTextInHeartbeat = !((document.getElementById('onlineText') || {}).title || '').includes('经代理');
         out.displayPicker = !!document.getElementById('displayPickerModal') && !!document.getElementById('displayThumbs') && typeof window.api.listDisplays === 'function';

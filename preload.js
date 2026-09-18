@@ -27,20 +27,14 @@ contextBridge.exposeInMainWorld('api', {
   // 查询
   searchPlayers: (q) => ipcRenderer.invoke('search:players', q),
   playerReport: (stbid) => ipcRenderer.invoke('report:player', stbid),
-  maggotReport: (stbid) => ipcRenderer.invoke('report:maggot', stbid),
-  onMaggotProgress: (cb) => ipcRenderer.on('maggot:progress', (e, d) => cb(d)),
+  dragonReport: (stbid) => ipcRenderer.invoke('report:dragon', stbid),
+  matchReview: (fid) => ipcRenderer.invoke('match:review', fid),
 
   // 版本
   getVersion: () => ipcRenderer.invoke('app:version'),
-  onVersion: (cb) => ipcRenderer.on('version', (e, d) => cb(d)),
-  onBypassState: (cb) => ipcRenderer.on('bypass:state', (e, d) => cb(d)),
-  onAnnouncement: (cb) => ipcRenderer.on('announcement', (e, d) => cb(d)),
 
   // API 用量 + 心跳
   getUsage: () => ipcRenderer.invoke('usage:get'),
-  getHeartbeat: () => ipcRenderer.invoke('heartbeat:get'),
-  pingHeartbeat: (url) => ipcRenderer.invoke('heartbeat:ping', url),
-  onHeartbeat: (cb) => ipcRenderer.on('heartbeat', (e, d) => cb(d)),
   getApiHealth: () => ipcRenderer.invoke('api:health'),
   onApiHealth: (cb) => ipcRenderer.on('api:health', (e, d) => cb(d)),
 
@@ -54,7 +48,6 @@ contextBridge.exposeInMainWorld('api', {
   getBans: () => ipcRenderer.invoke('tracker:getBans'),
   syncBans: () => ipcRenderer.invoke('tracker:syncBans'),
   testBanNotify: () => ipcRenderer.invoke('test:banNotify'),
-  testVersionUpdate: () => ipcRenderer.invoke('test:versionUpdate'),
   syncMyMatchesNow: () => ipcRenderer.invoke('match:syncNow'),
   getTrackerMatches: () => ipcRenderer.invoke('tracker:matches'),
   getMatchDetail: (fid) => ipcRenderer.invoke('tracker:matchDetail', fid),
@@ -68,12 +61,15 @@ contextBridge.exposeInMainWorld('api', {
   deleteAccount: (id) => ipcRenderer.invoke('tracker:deleteAccount', id),
   onMatchesChanged: (cb) => ipcRenderer.on('matches:changed', (e, d) => cb(d)),
 
-  // 对局录像（对象存储直传）
+  // 对局录像（本地）
   getReplayStatus: () => ipcRenderer.invoke('replay:status'),
   listLocalReplays: () => ipcRenderer.invoke('replay:localList'),
   deleteLocalReplay: (key) => ipcRenderer.invoke('replay:localDelete', key),
   cleanLocalReplays: (days) => ipcRenderer.invoke('replay:localClean', days),
-  readLocalReplay: (key) => ipcRenderer.invoke('replay:localRead', key),
+  prepareReplay: (key) => ipcRenderer.invoke('replay:prepare', key),
+  openReplayExternal: (key) => ipcRenderer.invoke('replay:openExternal', key),
+  replayPreviewCapture: (opts) => ipcRenderer.invoke('replay:previewCapture', opts),
+  replayPreviewRender: (exposure) => ipcRenderer.invoke('replay:previewRender', exposure),
   openLocalReplayFolder: () => ipcRenderer.invoke('replay:openLocalFolder'),
   getReplayDirInfo: () => ipcRenderer.invoke('replay:dirInfo'),
   testRecord: () => ipcRenderer.invoke('replay:testRecord'),
@@ -84,7 +80,6 @@ contextBridge.exposeInMainWorld('api', {
   moveReplays: (from, to) => ipcRenderer.invoke('replay:moveReplays', { from, to }),
   getScreenThumbnail: (displayId) => ipcRenderer.invoke('replay:screenThumbnail', displayId),
   onTestResult: (cb) => ipcRenderer.on('replay:testResult', (e, d) => cb(d)),
-  onRoomToolUsers: (cb) => ipcRenderer.on('room:toolusers', (e, d) => cb(d)),
   onReplayRecording: (cb) => ipcRenderer.on('replay:recording', (e, d) => cb(d)),
   onReplayPreview: (cb) => ipcRenderer.on('replay:preview', (e, d) => cb(d)),
   onReplayProgress: (cb) => ipcRenderer.on('replay:progress', (e, d) => cb(d)),

@@ -170,34 +170,47 @@ class BatraceClient {
     });
   }
 
-  // 本机最近对局（后台同步用，不计 24h 配额；TTL 30 分钟保证每小时真拉取）
+  // 本机最近对局（后台同步用；TTL 30 分钟保证每小时真拉取）。注意：所有真实请求都计入 24h 配额
   playerMatchesRecent(stbid, limit = 10) {
     return this._get(`/api/players/matches?stbid=${encodeURIComponent(stbid)}&limit=${limit}`, {
       ttl: 30 * 60 * 1000, cacheKey: `myMatches:${stbid}:${limit}`
     });
   }
 
-  // 封禁名单（后台同步用，不计 24h 配额；TTL 1 小时）
+  // 封禁名单（后台同步用；TTL 1 小时）
   leaderboardBan(limit = 500, offset = 0) {
     return this._get(`/api/leaderboard/ban?limit=${limit}&offset=${offset}`, {
       ttl: 3600 * 1000, cacheKey: `ban:${limit}:${offset}`
     });
   }
 
+  // 龙区分：最近 20 场（接口单次最多返回 20 场）；每场含全部玩家的赛前/赛后 ELO、摧毁分、损失分、占点、队伍、时长
+  playerMatchesPage(stbid, limit = 20) {
+    return this._get(`/api/players/matches?stbid=${encodeURIComponent(stbid)}&limit=${limit}`, {
+      ttl: 3600 * 1000, cacheKey: `pm:${stbid}:${limit}`
+    });
+  }
+
+  // 只读缓存、不发请求（单局复盘取已缓存的玩家分析判断角色，不为此额外请求）
+  peek(cacheKey, ttl) {
+    return this.cache ? this.cache.get(cacheKey, ttl) : null;
+  }
+
+  // 单局原始数据（游戏后端格式）：每个玩家的 ELO/摧毁/损失/占点/补给/友伤，以及单位级 UnitData
   matchById(matchId) {
     return this._get(`/api/match?matchid=${encodeURIComponent(matchId)}`, {
       ttl: 24 * 3600 * 1000, cacheKey: `match:${matchId}`
     });
   }
 
-  // 蛆查专用：带 mvpRanking（playerId/playerName/teamId/score/breakdown）+ economy 的单局完整数据
+  // BATrace 加工过的单局数据：mvpRanking（含 7 个分项）、economy、unitComposition、damageContribution 等
   analysisMatch(matchId) {
     return this._get(`/api/analysis/match?matchid=${encodeURIComponent(matchId)}`, {
       ttl: 24 * 3600 * 1000, cacheKey: `amatch:${matchId}`
     });
   }
 
-  // 单局数据（后台补胜负用：与 analysisMatch 同缓存，但不计 24h 配额）
+  // 单局数据（后台补胜负用，与 analysisMatch 同缓存；历史原因保留的别名）
   analysisMatchNoCount(matchId) {
     return this._get(`/api/analysis/match?matchid=${encodeURIComponent(matchId)}`, {
       ttl: 24 * 3600 * 1000, cacheKey: `amatch:${matchId}`

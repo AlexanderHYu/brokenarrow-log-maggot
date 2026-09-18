@@ -7,7 +7,8 @@
     "start": "electron .",
     "smoke": "electron smoke.js",
     "pack": "node scripts/prepare-icon.js && electron-builder --dir --publish never",
-    "dist": "node scripts/prepare-icon.js && electron-builder --win --publish never"
+    "dist": "node scripts/prepare-icon.js && electron-builder --win --publish never",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.js"
   },
   "author": "Zola",
   "license": "MIT",
@@ -28,7 +29,8 @@
       "renderer/**",
       "src/**",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "native/**"
     ],
     "win": {
       "target": [
@@ -52,7 +54,17 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "断箭蛆工具 byZola"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "ffmpeg.exe",
+          "LICENSE.txt"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "uiohook-napi": "^1.5.5"

@@ -1,11 +1,11 @@
-// ================= 本地录像管理（userData/replays/*.webm） =================
-// 本地录像管理（userData/replays/*.webm）：本模块只动本地文件。
+// ================= 本地录像管理（userData/replays/*.mp4，旧版 *.webm） =================
+// 本模块只动本地文件。
 const fs = require('fs');
 const path = require('path');
-const { parseReplayKey } = require('./s3Client');
+const { parseReplayKey, isReplayFile, REPLAY_EXT_RE } = require('./s3Client');
 const { mapIdFromName } = require('./analyzer');
 
-const NAME_RE = /^[A-Za-z0-9_.-]+\.webm$/i;
+const NAME_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(webm|mp4)$/i;
 
 function safeName(key) {
   const name = String(key || '').split(/[\\/]/).pop() || '';
@@ -18,14 +18,14 @@ function localReplayList(dir, mapName) {
   try {
     if (!fs.existsSync(dir)) return out;
     for (const f of fs.readdirSync(dir)) {
-      if (!f.toLowerCase().endsWith('.webm')) continue;
+      if (!isReplayFile(f)) continue;
       const meta = parseReplayKey(f);
       const full = path.join(dir, f);
       let size = 0, mtime = 0;
       try { const st = fs.statSync(full); size = st.size; mtime = st.mtimeMs; } catch (e) {}
       out.push({
         id: f,
-        fid: meta ? meta.fid : f.replace(/\.webm$/i, ''),
+        fid: meta ? meta.fid : f.replace(REPLAY_EXT_RE, ''),
         mapId: meta ? meta.mapId : null,
         map: meta && meta.mapId != null && mapName ? mapName(meta.mapId) : '',
         uploaderId: meta ? meta.uploaderId : '',
@@ -60,7 +60,7 @@ function localReplayClean(dir, days) {
     if (!fs.existsSync(dir)) return removed;
     const cutoff = days > 0 ? Date.now() - days * 24 * 3600 * 1000 : Infinity;
     for (const f of fs.readdirSync(dir)) {
-      if (!f.toLowerCase().endsWith('.webm')) continue;
+      if (!isReplayFile(f)) continue;
       const full = path.join(dir, f);
       try {
         const st = fs.statSync(full);
@@ -73,16 +73,12 @@ function localReplayClean(dir, days) {
   return removed;
 }
 
-function localReplayRead(dir, key) {
+// 本地录像的绝对路径（文件名经过白名单校验，防止路径穿越）
+function localReplayPath(dir, key) {
   const name = safeName(key);
-  if (!name) return { ok: false, message: '无效文件名' };
+  if (!name) return null;
   const full = path.join(dir, name);
-  try {
-    if (!fs.existsSync(full)) return { ok: false, message: '文件不存在' };
-    const buf = fs.readFileSync(full);
-    const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    return { ok: true, data: ab, size: buf.length };
-  } catch (e) { return { ok: false, message: String((e && e.message) || e) }; }
+  return fs.existsSync(full) ? full : null;
 }
 
 
@@ -125,4 +121,4 @@ function enrichReplayMaps(list, tracker, archive, mapName) {
   });
 }
 
-module.exports = { localReplayList, localReplayDelete, localReplayClean, localReplayRead, uploaderMetaFor, enrichReplayMaps };
+module.exports = { localReplayList, localReplayDelete, localReplayClean, localReplayPath, uploaderMetaFor, enrichReplayMaps };

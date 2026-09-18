@@ -36,27 +36,6 @@ function renderBudget(d) {
   t.classList.toggle('warn', exhausted);
   t.title = exhausted ? I18N.t('status.budgetExhausted') : '';
 }
-// 顶栏：心跳统计（在线人数）
-function renderHeartbeat(h) {
-  const el = $('onlineText');
-  if (!el) return;
-  lastHeartbeat = h;
-  if (h && h.online != null) {
-    el.classList.add('ok'); el.classList.remove('err');
-    el.textContent = I18N.t('status.online', { n: h.online });
-    el.title = h.lastError
-      ? I18N.t('status.heartbeatLastErr', { err: h.lastError })
-      : I18N.t('status.heartbeatLastOk', { t: h.lastPing ? new Date(h.lastPing).toLocaleTimeString('zh-CN') : '-' });
-  } else if (h && h.lastError) {
-    el.classList.remove('ok'); el.classList.add('err');
-    el.textContent = I18N.t('heartbeat.failed');
-    el.title = h.lastError;
-  } else {
-    el.classList.remove('ok', 'err');
-    el.textContent = I18N.t('status.online', { n: 0 });
-    el.title = I18N.t('status.onlineTitle');
-  }
-}
 // 顶栏：BATrace API 稳定性灯（绿=全通 / 黄=部分 / 红=全挂 / 灰=未检测）
 function renderApiHealth(d) {
   const el = $('apiHealth');
@@ -167,7 +146,6 @@ function closeConfirm(result) {
 }
 
 // ---------- 房间内也在用本工具的人（服务端比对，保护隐私） ----------
-let toolUserIds = new Set();
 // ---------- 当前对局渲染 ----------
 function renderSession(s) {
   resetPrevIfViewing();
@@ -217,7 +195,7 @@ function catLabel(key) { if (!key) return '-'; const k = CAT_LABELS[String(key).
 function playerCard(p) {
   const selfName = session.localName;
   const selfTag = selfName && p.name === selfName ? '<span class="pself">' + I18N.t('common.me') + '</span>' : '';
-  const toolTag = toolUserIds.has(String(p.id)) ? '<span class="ptool" title="' + I18N.t('common.alsoUsing') + '">🎮</span>' : '';
+  const rv = viewMode === 'prev' ? prevReview[String(p.id)] : null; // 上一局龙区复盘
   let statHtml = '';
   if (p.status === 'loading') statHtml = '<span class="loading">' + I18N.t('common.loading') + '</span>';
   else if (p.error) {
@@ -235,7 +213,7 @@ function playerCard(p) {
       ${units ? `<span class="topu" title="${I18N.t('common.fav', { u: esc(p.info.topUnits) })}">${esc(units)}</span>` : ''}`;
   }
   return `<div class="player-card" data-id="${p.id}" data-name="${esc(p.name)}" data-link="${PLAYER_URL(p.id)}" title="${I18N.t('common.leftClickFull')}">
-    <div class="prow"><span class="pname">${esc(p.name)}${selfTag}${toolTag}</span><span class="pid">ID ${esc(p.id)}</span><button class="p-copy" data-id="${p.id}" title="${I18N.t('common.copyRow')}">📋</button><span class="pmark">›</span></div>
+    <div class="prow">${rv ? dragonMarkHtml(rv.mark, true, rv.score) : ''}<span class="pname">${esc(p.name)}${selfTag}</span>${dragonTagsHtml(rv)}<span class="pid">ID ${esc(p.id)}</span><button class="p-copy" data-id="${p.id}" title="${I18N.t('common.copyRow')}">📋</button><span class="pmark">›</span></div>
     <div class="pstats">${statHtml || '<span class="dim">' + I18N.t('common.notQueried') + '</span>'}</div>
   </div>`;
 }
@@ -286,9 +264,10 @@ function togglePrevView() {
     for (const p of d.players) prevRows[p.id] = { id: p.id, name: p.name, team: p.team, status: 'idle' };
     $('currentCardTitle').textContent = I18N.t('match.prev');
     const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('match.backToCurrent');
-    $('matchInfo').innerHTML = `<span>${I18N.t('match.map', { v: '<b>' + esc(d.map || I18N.t('common.unknown')) + '</b>' })}</span><span>${I18N.t('match.fid', { v: '<b>' + esc(d.fid || '-') + '</b>' })}</span><span>${I18N.t('match.endTime', { v: '<b>' + fmtTime(d.endTime) + '</b>' })}</span><span>${I18N.t('match.playersN', { n: d.players.length })}</span>`;
+    $('matchInfo').innerHTML = `<span>${I18N.t('match.map', { v: '<b>' + esc(d.map || I18N.t('common.unknown')) + '</b>' })}</span><span>${I18N.t('match.fid', { v: '<b>' + esc(d.fid || '-') + '</b>' })}</span><span>${I18N.t('match.endTime', { v: '<b>' + fmtTime(d.endTime) + '</b>' })}</span><span>${I18N.t('match.playersN', { n: d.players.length })}</span><span id="prevReviewStatus"></span>`;
     $('queryStatus').textContent = '';
     renderPrevGrid();
+    reviewPrevMatch(d);
     // 打开即自动粗查一次（同一局去重）
     const key = d.fid || ('t:' + (d.startTime || 0));
     if (prevQueriedKey !== key) {
@@ -306,6 +285,7 @@ function exitPrevView() {
   viewMode = 'current';
   prevMatch = null;
   prevRows = {};
+  prevReview = {};
   const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('btn.prevMatch');
   renderSession(session);
 }
@@ -314,6 +294,7 @@ function resetPrevIfViewing() {
   viewMode = 'current';
   prevMatch = null;
   prevRows = {};
+  prevReview = {};
   const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('btn.prevMatch');
   const t = $('currentCardTitle');
   if (t) t.textContent = session.current ? I18N.t('match.current') : I18N.t('match.room');
@@ -397,7 +378,7 @@ function renderReport(r, name) {
         <span class="dim">ID ${r.stbid}</span>
         <span class="dim">${I18N.t('common.sampleMatches', { n: r.matchCount ?? '-' })}</span>
         <button id="btnCopyReport" class="ghost" style="margin-left:auto">${I18N.t('report.copySingle')}</button>
-        <button id="btnMaggotFromReport" class="accent">${I18N.t('btn.maggot')}</button>
+        <button id="btnDragonFromReport" class="accent">${I18N.t('btn.dragon')}</button>
       </div>
       <div class="kv">
         <div class="item"><b>${r.elo ?? '-'}</b><span>ELO</span></div>
@@ -423,8 +404,8 @@ function renderReport(r, name) {
       setTimeout(() => { copyBtn.textContent = I18N.t('report.copySingle'); }, 1500);
     }).catch(() => {});
   };
-  const mgBtn = $('btnMaggotFromReport');
-  if (mgBtn) mgBtn.onclick = () => runMaggot(r.stbid, name || r.stbid);
+  const dgBtn = $('btnDragonFromReport');
+  if (dgBtn) dgBtn.onclick = () => runDragon(r.stbid, name || r.stbid);
 }
 
 const STYLE_LABELS = {
@@ -535,13 +516,14 @@ async function collectReplayItemsForFid(fid) {
   }));
 }
 
-// 播放本地视角（离线可看）
+// 播放本地录像：replay:// 流式读取，进度条可随意拖动（旧版 WebM 第一次播放前自动补索引）
 async function playReplayItem(item) {
   if (item.local) {
-    const r = await BA.readLocalReplay(item.local.id);
+    const legacy = /\.webm$/i.test(item.local.id);
+    if (legacy) setStatus(I18N.t('replay.preparing'), true);
+    const r = await BA.prepareReplay(item.local.id);
     if (r && r.ok) {
-      const url = URL.createObjectURL(new Blob([r.data], { type: 'video/webm' }));
-      openReplayPlayer({ id: item.local.id, videoUrl: url, fid: item.fid, name: item.name, map: item.map, isBlob: true });
+      openReplayPlayer({ id: item.local.id, videoUrl: r.url, fid: item.fid, name: item.name, map: item.map });
       return;
     }
   }
@@ -550,7 +532,6 @@ async function playReplayItem(item) {
 
 let replayPickResolve = null;
 let lastVersionInfo = null; // 最近一次版本信息（下载按钮用）
-let lastHeartbeat = null;   // 最近一次心跳（语言切换时重渲染）
 let currentCfg = null;      // 最近一次配置（语言切换时重渲染录像提示）
 function pickReplay(items) {
   return new Promise((resolve) => {
@@ -589,6 +570,7 @@ async function openMatchDetail(fid) {
     if (radarTimer) { clearTimeout(radarTimer); radarTimer = null; }
     stopRadarLoading();
     renderMatchDetail(d);
+    fillMatchReview(d);
   } catch (e) {
     if (radarTimer) { clearTimeout(radarTimer); radarTimer = null; }
     stopRadarLoading();
@@ -631,6 +613,7 @@ function renderMatchDetail(d) {
     const ex = p.exp != null ? p.exp : '-';
     const md = p.medals != null ? p.medals : '-';
     return `<tr data-id="${esc(p.id)}" data-name="${esc(p.name || '')}" data-link="${PLAYER_URL(p.id)}" title="${I18N.t('inv.rightClickInv')}">
+      <td class="md-dragon" data-dragon-id="${esc(p.id)}"></td>
       <td><b>${esc(p.name || I18N.t('common.unknown'))}</b></td>
       <td class="dim md-id-cell"><span class="md-id">${esc(p.id)}</span></td>
       <td>${eloC}</td>
@@ -649,11 +632,11 @@ function renderMatchDetail(d) {
     <div class="inv-section"><b>${title}（${list.length}）</b>
       <table class="md-table">
         <colgroup>
-          <col style="width:13%"><col style="width:11%"><col style="width:8%"><col style="width:10%">
-          <col style="width:7%"><col style="width:7%"><col style="width:9%"><col style="width:9%">
-          <col style="width:6%"><col style="width:7%"><col style="width:7%"><col style="width:6%">
+          <col style="width:9%"><col style="width:12%"><col style="width:9%"><col style="width:8%"><col style="width:9%">
+          <col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:8%">
+          <col style="width:6%"><col style="width:7%"><col style="width:6%"><col style="width:6%">
         </colgroup>
-        <thead><tr><th>${I18N.t('match.thPlayer')}</th><th>${I18N.t('match.thId')}</th><th>${I18N.t('match.thElo')}</th><th>${I18N.t('match.thScore')}</th><th>${I18N.t('match.thObj')}</th><th>${I18N.t('match.thKills')}</th><th>${I18N.t('match.thDmg')}</th><th>${I18N.t('match.thDmgTaken')}</th><th>${I18N.t('match.thKd')}</th><th>${I18N.t('match.thSupply')}</th><th>${I18N.t('match.thExp')}</th><th>${I18N.t('match.thMedals')}</th></tr></thead>
+        <thead><tr><th>${I18N.t('match.thDragon')}</th><th>${I18N.t('match.thPlayer')}</th><th>${I18N.t('match.thId')}</th><th>${I18N.t('match.thElo')}</th><th>${I18N.t('match.thScore')}</th><th>${I18N.t('match.thObj')}</th><th>${I18N.t('match.thKills')}</th><th>${I18N.t('match.thDmg')}</th><th>${I18N.t('match.thDmgTaken')}</th><th>${I18N.t('match.thKd')}</th><th>${I18N.t('match.thSupply')}</th><th>${I18N.t('match.thExp')}</th><th>${I18N.t('match.thMedals')}</th></tr></thead>
         <tbody>${list.map(playerRow).join('')}</tbody>
       </table>
     </div>` : '';
@@ -680,6 +663,7 @@ function renderMatchDetail(d) {
     </div>
     ${fetchNote}
     ${restartNote}
+    <div id="mdReviewNote" class="dim" style="color:var(--accent)"></div>
     ${body}`;
 }
 
@@ -933,7 +917,7 @@ function on(id, event, handler) {
 // ---------- 绑定所有按钮（同步执行，不依赖异步初始化） ----------
 // ---------- 蛆查（单人触发，算法与网站同步） ----------
 let lastReport = null;
-const GITHUB_URL = 'https://github.com/Zawinzala/brokenarrow-log-maggot';
+const GITHUB_URL = 'https://github.com/AlexanderHYu/brokenarrow-log-maggot';
 const BATRACE_URL = 'https://app.batrace.top/';
 const MAGGOT_SITE_URL = 'https://github.com/Zawinzala/Broken-Arrow-Maggot';
 
@@ -989,6 +973,7 @@ document.addEventListener('contextmenu', (e) => {
     const fid = rp.dataset.fid || '';
     const items = [];
     if (fid) items.push({ label: I18N.t('ctx.openMatchDetail'), action: () => openMatchDetail(fid) });
+    items.push({ label: I18N.t('ctx.openExternal'), action: () => BA.openReplayExternal(rp.dataset.key) });
     items.push({ label: I18N.t('ctx.openLocation'), action: () => BA.openLocalReplayFolder() });
     items.push({ label: I18N.t('ctx.deleteReplay'), action: async () => {
       const ok = await askConfirm(I18N.t('confirm.deleteReplay'));
@@ -1027,7 +1012,6 @@ document.addEventListener('contextmenu', (e) => {
 });
 document.addEventListener('click', () => hideCtx());
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideCtx(); clearInvGameTimer(); stopRadarLoading(); if (window.BAGame && BAGame.isOpen()) BAGame.close(); const bm = $('banAlertModal'); if (bm) bm.classList.add('hidden'); const m = $('investigateModal'); if (m) m.classList.add('hidden'); const mm = $('matchModal'); if (mm) mm.classList.add('hidden'); const rp = $('replayModal'); if (rp) closeReplayPlayer(); const rsm = $('recSettingsModal'); if (rsm && !rsm.classList.contains('hidden')) closeRecSettings(); const pk = $('replayPickerModal'); if (pk) { pk.classList.add('hidden'); if (replayPickResolve) { replayPickResolve(null); replayPickResolve = null; } } } });
-  const anm = $('announcementModal'); if (anm) anm.classList.add('hidden');
 
 ﻿﻿﻿// ---------- 调查加载雷达动画（纯视觉，不可交互） ----------
 let radarLoading = null;
@@ -1368,43 +1352,82 @@ let recOriginalCount = 0;
 let recMoved = false;
 function recEstimate(fps, bitrateMbps, audioOn) {
   if (recCore && recCore.estSize45) return recCore.estSize45(fps, bitrateMbps, audioOn);
-  const bit = Math.min(10, Math.max(3, Math.round(Number(bitrateMbps) || 5)));
-  return { mb: Math.round(bit / 8 * 2700 * 0.5), audioMb: audioOn ? 43 : 0, bps: bit };
+  const bit = Math.min(40, Math.max(3, Math.round(Number(bitrateMbps) || 8)));
+  return { mb: Math.round(bit / 8 * 2700), audioMb: audioOn ? 43 : 0, bps: bit };
 }
 function fmtMb(mb) { return mb >= 1024 ? (mb / 1024).toFixed(2) + ' GB' : Math.round(mb) + ' MB'; }
-const REC_QUALITIES = [240, 360, 480, 720, 1080];
-function recSnapQuality(v) {
-  const n = Number(v);
-  let best = 720, bd = Infinity;
-  for (const q of REC_QUALITIES) { const d = Math.abs(q - n); if (d < bd) { bd = d; best = q; } }
-  return best;
-}
-function recRangeVal(id, def, snap) {
+function recRangeVal(id, def) {
   const el = $(id);
-  if (!el) return def;
-  let v = Number(el.value);
-  if (snap) v = recSnapQuality(v);
-  return v;
+  return el ? Number(el.value) : def;
 }
-function recSetRange(id, val, snap) {
+function recSetRange(id, val) {
   const el = $(id);
-  if (!el) return;
-  let v = Number(val);
-  if (snap) v = recSnapQuality(v);
-  el.value = String(v);
+  if (el) el.value = String(Number(val));
 }
+function recNormQuality(q) { return recCore ? recCore.normQuality(q) : 1080; }
+function recFmtExposure(e) { return recCore ? recCore.fmtExposure(e) : (Number(e) || 0) + ' EV'; }
+
+// ---------- 录制效果预览（录像设置弹窗内） ----------
+let recPreviewHas = false;     // 主进程里是否已有截好的画面（有才能只调曝光重新渲染）
+let recPreviewSeq = 0;         // 丢弃过期的渲染结果（拖滑块时会连续发起）
+let recPreviewTimer = null;
+function recPreviewShowInfo(info, ev, extra) {
+  const el = $('recPreviewInfo');
+  if (!el || !info) return;
+  const key = info.hdr ? 'rec.previewInfoHdr' : 'rec.previewInfoSdr';
+  el.textContent = I18N.t(key, { label: info.label || '', w: info.width, h: info.height, nits: info.sdrWhiteNits || '?', ev: recFmtExposure(ev) }) + (extra ? ' · ' + extra : '');
+}
+async function recPreviewCapture() {
+  const btn = $('btnRecPreview');
+  const delay = Number(($('recPreviewDelay') || {}).value || 0);
+  const ev = recRangeVal('recExposureRange', 0);
+  const info = $('recPreviewInfo');
+  if (btn) btn.disabled = true;
+  let left = delay;
+  const tick = () => { if (info) info.textContent = left > 0 ? I18N.t('rec.previewCountdown', { n: left }) : I18N.t('rec.previewCapturing'); };
+  tick();
+  const cd = delay ? setInterval(() => { left--; tick(); if (left <= 0) clearInterval(cd); }, 1000) : null;
+  try {
+    const r = await BA.replayPreviewCapture({ displayId: $('recDisplay') ? $('recDisplay').value : '', delay, exposure: ev });
+    if (!r || !r.ok) { if (info) info.textContent = I18N.t('rec.previewFail', { msg: (r && r.message) || I18N.t('common.unknown') }); return; }
+    recPreviewHas = true;
+    $('recPreviewImg').src = r.image;
+    $('recPreviewNewFig').classList.remove('hidden');
+    recPreviewShowInfo(r.info, ev);
+  } catch (e) {
+    if (info) info.textContent = I18N.t('rec.previewFail', { msg: e.message });
+  } finally {
+    if (cd) clearInterval(cd);
+    if (btn) btn.disabled = false;
+  }
+}
+// 拖曝光滑块：停手 350ms 后按新曝光重新渲染已截好的画面
+function recPreviewRerender() {
+  if (!recPreviewHas) return;
+  if (recPreviewTimer) clearTimeout(recPreviewTimer);
+  recPreviewTimer = setTimeout(async () => {
+    const seq = ++recPreviewSeq;
+    const ev = recRangeVal('recExposureRange', 0);
+    const info = $('recPreviewInfo');
+    if (info) info.textContent = I18N.t('rec.previewRendering');
+    const r = await BA.replayPreviewRender(ev).catch((e) => ({ ok: false, message: e.message }));
+    if (seq !== recPreviewSeq) return;
+    if (r && r.ok) { $('recPreviewImg').src = r.image; recPreviewShowInfo(r.info, ev); }
+    else if (info) info.textContent = I18N.t('rec.previewFail', { msg: (r && r.message) || I18N.t('common.unknown') });
+  }, 350);
+}
+function recQualityLabel(q) { return q ? q + 'p' : I18N.t('rec.qualityNativeShort'); }
 function recSliderLabels() {
-  const q = recRangeVal('recQualityRange', 720, true);
-  const fps = recRangeVal('recFpsRange', 30, false);
-  const bit = recRangeVal('recBitrateRange', 5, false);
-  const qv = $('recQualityVal'); if (qv) qv.textContent = q + 'p';
+  const fps = recRangeVal('recFpsRange', 30);
+  const bit = recRangeVal('recBitrateRange', 8);
   const fv = $('recFpsVal'); if (fv) fv.textContent = fps + ' fps';
   const bv = $('recBitrateVal'); if (bv) bv.textContent = bit + ' Mbps';
+  const ev = $('recExposureVal'); if (ev) ev.textContent = recFmtExposure(recRangeVal('recExposureRange', 0));
 }
 function updateRecEstimate() {
   recSliderLabels();
-  const fps = recRangeVal('recFpsRange', 30, false);
-  const bit = recRangeVal('recBitrateRange', 5, false);
+  const fps = recRangeVal('recFpsRange', 30);
+  const bit = recRangeVal('recBitrateRange', 8);
   const audioOn = $('recAudio') ? $('recAudio').value !== 'off' : false;
   const est = recEstimate(fps, bit, audioOn);
   const el = $('recEstSize');
@@ -1425,9 +1448,10 @@ async function openRecSettings() {
     sel.innerHTML = list.map((d) => '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(d.label || d.id) + '</option>').join('');
     if (!sel.value && list.length) sel.value = list[0].id;
   }
-  recSetRange('recQualityRange', cfg.replayQuality || 720, true);
-  recSetRange('recFpsRange', cfg.replayFps || 30, false);
-  recSetRange('recBitrateRange', cfg.replayBitrateMbps || 5, false);
+  const qs = $('recQuality'); if (qs) qs.value = String(recNormQuality(cfg.replayQuality));
+  recSetRange('recFpsRange', cfg.replayFps || 30);
+  recSetRange('recBitrateRange', cfg.replayBitrateMbps || 8);
+  recSetRange('recExposureRange', recCore ? recCore.normExposure(cfg.replayExposure) : 0);
   const au = $('recAudio'); if (au) au.value = cfg.replayAudio === 'off' ? 'off' : 'default';
   recSaveDirCache = cfg.replaySaveDir || '';
   const dirEl = $('recSaveDir');
@@ -1440,13 +1464,14 @@ function closeRecSettings() {
   const m = $('recSettingsModal'); if (m) m.classList.add('hidden');
 }
 async function saveRecSettings() {
-  const quality = recRangeVal('recQualityRange', 720, true);
-  const fps = recRangeVal('recFpsRange', 30, false);
-  const bitrate = recRangeVal('recBitrateRange', 5, false);
+  const quality = recNormQuality($('recQuality') ? $('recQuality').value : 1080);
+  const fps = recRangeVal('recFpsRange', 30);
+  const bitrate = recRangeVal('recBitrateRange', 8);
   const audio = $('recAudio') ? $('recAudio').value : 'default';
   const displayId = $('recDisplay') ? $('recDisplay').value : '';
   const newDir = recSaveDirCache || recOriginalDir;
-  await BA.setConfig({ replayQuality: quality, replayFps: fps, replayBitrateMbps: bitrate, replayAudio: audio, replayDisplayId: displayId, replaySaveDir: recSaveDirCache });
+  const exposure = recCore ? recCore.normExposure(recRangeVal('recExposureRange', 0)) : 0;
+  await BA.setConfig({ replayQuality: quality, replayFps: fps, replayBitrateMbps: bitrate, replayExposure: exposure, replayAudio: audio, replayDisplayId: displayId, replaySaveDir: recSaveDirCache });
   renderReplayNote({ replayQuality: quality, replayFps: fps, replayBitrateMbps: bitrate, replayAudio: audio });
   if (recOriginalDir && newDir && newDir !== recOriginalDir && recOriginalCount > 0 && !recMoved) {
     const ok = await askConfirm(I18N.t('replay.migrateConfirm', { from: recOriginalDir, to: newDir }));
@@ -1468,11 +1493,11 @@ async function saveRecSettings() {
 function renderReplayNote(cfg) {
   const el = $('replayNote');
   if (!el) return;
-  const q = REC_QUALITIES.includes(Number(cfg.replayQuality)) ? Number(cfg.replayQuality) : 720;
+  const q = recNormQuality(cfg.replayQuality);
   const fps = Math.min(60, Math.max(30, Math.round(Number(cfg.replayFps) || 30)));
-  const bit = Math.min(10, Math.max(3, Math.round(Number(cfg.replayBitrateMbps) || 5)));
+  const bit = recCore ? recCore.normBitrate(cfg.replayBitrateMbps) : 8;
   const est = recEstimate(fps, bit, cfg.replayAudio !== 'off');
-  el.textContent = I18N.t('replay.note', { q: q, fps: fps, bit: bit, est: fmtMb(est.mb) });
+  el.textContent = I18N.t('replay.note', { q: recQualityLabel(q), fps: fps, bit: bit, est: fmtMb(est.mb) });
 }
 
 // 主界面行车记录仪卡片：按时间倒序的录像列表（播放 / 删除 / 打开位置 / 清理 30 天前）
@@ -1642,104 +1667,162 @@ function setThemePicker(name) {
   document.querySelectorAll('.theme-swatch').forEach((b) => b.classList.toggle('active', b.dataset.theme === name));
 }
 
-async function runMaggot(stbid, name) {
-  const area = $('maggotArea');
-  $('maggotCalls').textContent = '';
-  setMaggotBusy(true);
-  setMaggotProgress(I18N.t('maggot.progressText'), 0);
-  try {
-    const r = await BA.maggotReport(stbid);
-    if (r.error) { area.innerHTML = `<div class="loss">${esc(r.error)}</div>`; return; }
-    renderMaggot(r, name);
-  } catch (e) {
-    area.innerHTML = `<div class="loss">${esc(I18N.t('maggot.fail', { msg: e.message }))}</div>`;
-  } finally {
-    setMaggotBusy(false);
-    hideMaggotProgress();
-  }
+// ---------- 龙区分（取代蛆指数）：越高越像龙，越低越像区 ----------
+// 单局标记字「龙 / 区 / 泯」是招牌，不随界面语言翻译（悬停提示会解释）
+const DRAGON_MARK = { dragon: '龙', qu: '区', min: '泯' };
+// 分数是同类玩家里的百分位（1 + 9 × 百分位）：前 30% 金色、后 30% 红色
+function dragonColor(v) { return v >= 7.3 ? '#facc15' : v >= 3.7 ? '#94a3b8' : '#f87171'; }
+function dragonMarkHtml(mark, big, score) {
+  const title = I18N.t('dragon.markTitle.' + mark) + (score != null ? ' · ' + I18N.t('dragon.scoreTitle', { s: score }) : '');
+  return `<span class="dg-mark ${mark}${big ? ' big' : ''}" title="${esc(title)}">${DRAGON_MARK[mark] || ''}</span>`;
+}
+// 复盘称号：只看这一局的实际作用（大腿 / 背锅侠 / 掉线狗 / 收割机……），悬停看原因；以少打多另外标
+function dragonTagsHtml(rv) {
+  if (!rv) return '';
+  const titles = (rv.titles || []).map((t) => {
+    const tipKey = 'title.' + t.id + (t.params && t.params.silent ? '.tipSilent' : '.tip');
+    return `<span class="dg-tag ${t.kind || 'neutral'}" title="${esc(I18N.t(tipKey, t.params || {}))}">${esc(I18N.t('title.' + t.id))}</span>`;
+  }).join('');
+  const lone = (rv.titles || []).some((t) => t.id === 'lonewolf');
+  return titles + (rv.outnumbered && !rv.afk && !lone ? `<span class="dg-tag neutral">${I18N.t('dragon.outnumbered')}</span>` : '');
+}
+function dragonReviewSummary(r) {
+  const nameOf = (p) => (p ? p.name || p.id : '-');
+  let s = r.winnerTeam == null
+    ? I18N.t('dragon.reviewNoWinner')
+    : I18N.t('dragon.reviewSummary', { mvp: nameOf(r.players.find((p) => p.mvp)), blame: nameOf(r.players.find((p) => p.blame)) });
+  const afk = r.players.filter((p) => p.afk).length;
+  if (afk) s += I18N.t('dragon.reviewAfk', { n: afk });
+  return s;
 }
 
-// 查询期间禁用所有「查蛆指数」入口按钮；结束后恢复
-function setMaggotBusy(busy) {
-  ['btnMaggot', 'btnMaggotFromReport', 'btnInvMaggot'].forEach((id) => {
+// 查询期间禁用所有「查龙区分」入口按钮；结束后恢复
+function setDragonBusy(busy) {
+  ['btnDragon', 'btnDragonFromReport', 'btnInvDragon'].forEach((id) => {
     const el = $(id);
     if (el) el.disabled = !!busy;
   });
 }
-// 进度行：显示并更新文字/百分比
-function setMaggotProgress(text, pct) {
-  const row = $('maggotProgressRow');
-  if (row) row.classList.remove('hidden');
-  const t = $('maggotProgressText'); if (t) t.textContent = text || '';
-  const b = $('maggotProgressBar'); if (b) b.style.width = Math.max(0, Math.min(100, Number(pct) || 0)) + '%';
-  const p = $('maggotProgressPct'); if (p) p.textContent = (pct != null ? Math.round(pct) + '%' : '');
-}
-function hideMaggotProgress() {
-  const row = $('maggotProgressRow');
-  if (row) row.classList.add('hidden');
+
+async function runDragon(stbid, name) {
+  const area = $('dragonArea');
+  $('dragonCalls').textContent = '';
+  setDragonBusy(true);
+  area.innerHTML = '<div class="dim">' + esc(I18N.t('dragon.loading')) + '</div>';
+  try {
+    const r = await BA.dragonReport(stbid);
+    if (r.error) {
+      area.innerHTML = `<div class="loss">${esc(r.error === 'noRated' ? I18N.t('dragon.noRated') : I18N.t('dragon.fail', { msg: r.message || r.error }))}</div>`;
+      return;
+    }
+    renderDragon(r, name);
+  } catch (e) {
+    area.innerHTML = `<div class="loss">${esc(I18N.t('dragon.fail', { msg: e.message }))}</div>`;
+  } finally {
+    setDragonBusy(false);
+  }
 }
 
-function renderMaggot(r, name) {
-  const trendMap = { up: I18N.t('maggot.trendUp'), down: I18N.t('maggot.trendDown'), flat: I18N.t('maggot.trendFlat') };
-  const color = r.color === 'green' ? '#4ade80' : r.color === 'yellow' ? '#facc15' : '#f87171';
-  const pct = r.maggotIndex != null ? Math.max(0, Math.min(100, ((r.maggotIndex - 1) / 9) * 100)) : 50;
+function renderDragon(r, name) {
+  const color = dragonColor(r.value);
+  const toPct = (v) => Math.max(0, Math.min(100, ((v - 1) / 9) * 100));
+  const pct = toPct(r.value);
+  const bar = (label, v) => `<div class="dg-part"><span>${label}</span><span class="dg-bar"><i style="width:${v == null ? 0 : Math.round(v * 100)}%"></i></span><b>${v == null ? '-' : Math.round(v * 100)}</b></div>`;
+  const reasons = (r.reasons || []).slice(0, 6)
+    .map((x) => `<li class="${x.weight > 0 ? 'win' : x.weight < 0 ? 'loss' : 'dim'}">${esc(I18N.t('dragon.r.' + x.key, x.params || {}))}</li>`).join('');
+  const flags = (m) => [m.conscript ? I18N.t('dragon.flagConscript') : '', m.minutes < 10 ? I18N.t('dragon.flagShort') : ''].filter(Boolean).join(' ');
   const rows = (r.rows || []).map((m) => `
     <tr>
-      <td class="${m.win ? 'win' : 'loss'}">${m.win ? I18N.t('common.win') : I18N.t('common.loss')}</td>
-      <td class="dim" data-link="${MATCH_URL(m.matchId)}" title="${I18N.t('common.rightClickBatrace')}">${esc(m.matchId ?? '-')}</td>
-      <td>#${m.myRank}</td>
-      <td>#${m.kRank}</td>
-      <td>#${m.oRank}</td>
-      <td>#${m.kdRank}</td>
-      <td>#${m.lossRank}</td>
+      <td>${dragonMarkHtml(m.mark, false, m.score)}</td>
+      <td class="${m.won ? 'win' : 'loss'}">${m.won ? I18N.t('common.win') : I18N.t('common.loss')}</td>
+      <td>${esc(m.map || '-')}</td>
+      <td class="dim">${Math.round(m.minutes)}′</td>
+      <td class="dim">${Math.round(m.expected * 100)}%</td>
+      <td>${m.kd.toFixed(2)}</td>
+      <td>${m.contrib != null ? m.contrib.toFixed(2) + '×' : '-'}</td>
+      <td>${m.obj != null ? m.obj.toFixed(2) + '×' : '-'}</td>
       <td>${fmtDelta(m.eloDelta)}</td>
+      <td><b>${m.score}</b></td>
+      <td class="dim">${flags(m)}</td>
+      <td class="dim" data-link="${MATCH_URL(m.fid)}" title="${I18N.t('common.rightClickBatrace')}">${esc(m.fid)}</td>
     </tr>`).join('');
-  $('maggotCalls').textContent = I18N.t('maggot.calls', { n: r.calls });
-  $('maggotArea').innerHTML = `
-    <div class="maggot-panel">
+  $('dragonCalls').textContent = I18N.t('dragon.calls', { n: r.calls });
+  // 角色：占比 ≥ 5% 的按占比从高到低列出
+  const roleList = ['armor', 'inf', 'recon', 'arty', 'aa', 'heli', 'jet']
+    .filter((k) => (r.roles[k] || 0) >= 5).sort((a, b) => r.roles[b] - r.roles[a])
+    .map((k) => I18N.t('dragon.role.' + k) + ' ' + r.roles[k] + '%').join(' · ');
+  const roles = r.roles.known ? I18N.t('dragon.roles', { list: roleList }) : I18N.t('dragon.rolesUnknown');
+  const range = r.range || [r.value, r.value];
+  $('dragonArea').innerHTML = `
+    <div class="maggot-panel dragon-panel">
       <div class="mg-head">
         <div class="mg-score">
-          <span class="mg-num" style="color:${color}">${r.maggotIndex}</span>
-          <span class="mg-label" style="border-color:${color};color:${color}">${esc(r.label)}</span>
-          <span class="mg-trend">${trendMap[r.trend] || ''}</span>
+          <span class="mg-num" style="color:${color}">${r.value}</span>
+          <span class="mg-label" style="border-color:${color};color:${color}">${esc(I18N.t('dragon.tier.' + r.tier))}</span>
         </div>
         <div class="mg-meta">
           <span class="mg-name" data-link="${PLAYER_URL(r.stbid)}" title="${I18N.t('common.rightClickBatrace')}">${esc(name || r.stbid)}</span>
-          <span class="dim">${I18N.t('maggot.avgRank', { rank: r.avgRank })}</span>
+          <span class="dim">${I18N.t('dragon.meta', { n: r.matchCount, lo: range[0], hi: range[1], win: Math.round(r.summary.winRate * 100), exp: Math.round(r.summary.avgExpected * 100) })}</span>
+          <span class="dim">${roles}</span>
         </div>
       </div>
       <div class="mg-meter">
-        <div class="mg-track" style="position:relative"><div class="mg-ind" style="left:${pct}%;transform:translateX(-50%)"></div></div>
-        <div class="mg-scale"><span>${I18N.t('maggot.scaleGod')}</span><span>${I18N.t('maggot.scaleMaggot')}</span></div>
+        <div class="mg-track dg-track"><div class="dg-range" style="left:${toPct(range[0])}%;width:${Math.max(0, toPct(range[1]) - toPct(range[0]))}%" title="${esc(range[0] + '~' + range[1])}"></div><div class="mg-ind" style="left:${pct}%;transform:translateX(-50%)"></div></div>
+        <div class="mg-scale"><span>${I18N.t('dragon.scaleQu')}</span><span>${I18N.t('dragon.scaleDragon')}</span></div>
       </div>
-      <div class="mg-refs">
-        <div class="item"><b>#${r.refs.kdr}</b><span>${I18N.t('maggot.avgKdr')}</span></div>
-        <div class="item"><b>#${r.refs.kr}</b><span>${I18N.t('maggot.avgKr')}</span></div>
-        <div class="item"><b>#${r.refs.dr}</b><span>${I18N.t('maggot.avgDr')}</span></div>
-        <div class="item"><b>#${r.refs.or}</b><span>${I18N.t('maggot.avgOr')}</span></div>
-        <div class="item"><b>${r.refs.wr}%</b><span>${I18N.t('maggot.wr12')}</span></div>
+      <div class="dg-parts">
+        ${bar(I18N.t('dragon.part.kd'), r.parts.kd)}${bar(I18N.t('dragon.part.contrib'), r.parts.contrib)}${bar(I18N.t('dragon.part.outcome'), r.parts.outcome)}
       </div>
+      ${reasons ? `<ul class="dg-reasons">${reasons}</ul>` : ''}
       <table class="matches">
-        <thead><tr><th>${I18N.t('maggot.thResult')}</th><th>${I18N.t('maggot.thFid')}</th><th>${I18N.t('maggot.thRank')}</th><th>${I18N.t('maggot.thKills')}</th><th>${I18N.t('maggot.thMvp')}</th><th>${I18N.t('maggot.thKd')}</th><th>${I18N.t('maggot.thLosses')}</th><th>${I18N.t('maggot.thElo')}</th></tr></thead>
+        <thead><tr><th></th><th>${I18N.t('dragon.th.result')}</th><th>${I18N.t('dragon.th.map')}</th><th>${I18N.t('dragon.th.minutes')}</th><th>${I18N.t('dragon.th.expected')}</th><th>${I18N.t('dragon.th.kd')}</th><th>${I18N.t('dragon.th.contrib')}</th><th>${I18N.t('dragon.th.obj')}</th><th>${I18N.t('dragon.th.elo')}</th><th>${I18N.t('dragon.th.score')}</th><th></th><th>${I18N.t('dragon.th.fid')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="dim note">${esc(I18N.t('maggot.algorithm'))}</div>
+      <div class="dim note">${esc(I18N.t('dragon.algorithm'))}</div>
     </div>`;
 }
 
-// ---------- 版本提醒 ----------
-// 开发者隐秘提示：BATrace 专属 bypass 状态（设置 → 开发者测试区）
-function renderBypassHint(s) {
-  const el = $('bypassHint');
-  if (!el) return;
-  if (s && s.enabled) {
-    el.textContent = I18N.t('dev.bypassOn', { ms: s.delayMs || 300 });
-    el.style.color = '#4ade80';
-  } else {
-    el.textContent = I18N.t('dev.bypassOff');
-    el.style.color = '';
+// 上一局龙区复盘：结果与粗查结果分开存（粗查每回来一个人都会整条覆盖 prevRows），渲染卡片时再查
+let prevReview = {};
+function setPrevReviewStatus(text) { const el = $('prevReviewStatus'); if (el) el.textContent = text || ''; }
+async function reviewPrevMatch(d) {
+  prevReview = {};
+  if (!d || !d.fid || !/^\d+$/.test(String(d.fid))) return;
+  const fid = String(d.fid);
+  setPrevReviewStatus(I18N.t('dragon.reviewing'));
+  try {
+    const r = await BA.matchReview(fid);
+    if (viewMode !== 'prev' || !prevMatch || String(prevMatch.fid) !== fid) return; // 期间已切走
+    if (r.error) { setPrevReviewStatus(r.error === 'notYet' ? I18N.t('dragon.notYet') : I18N.t('dragon.reviewFail', { msg: r.message || r.error })); return; }
+    for (const p of r.players) prevReview[p.id] = p;
+    setPrevReviewStatus(dragonReviewSummary(r));
+    renderPrevGrid();
+  } catch (e) {
+    setPrevReviewStatus(I18N.t('dragon.reviewFail', { msg: e.message }));
   }
 }
+
+// 对局详情弹窗：表格第一列填龙/区/泯与复盘标签
+async function fillMatchReview(d) {
+  if (!d || !d.fid || !/^\d+$/.test(String(d.fid))) return;
+  const note = $('mdReviewNote');
+  if (note) note.textContent = I18N.t('dragon.reviewing');
+  try {
+    const r = await BA.matchReview(String(d.fid));
+    if (r.error) { if (note) note.textContent = r.error === 'notYet' ? I18N.t('dragon.notYet') : I18N.t('dragon.reviewFail', { msg: r.message || r.error }); return; }
+    const byId = {};
+    for (const p of r.players) byId[p.id] = p;
+    document.querySelectorAll('#matchDetailBody td.md-dragon[data-dragon-id]').forEach((td) => {
+      const rv = byId[td.dataset.dragonId];
+      if (rv) td.innerHTML = dragonMarkHtml(rv.mark, false, rv.score) + ' <span class="dg-score">' + rv.score + '</span>' + dragonTagsHtml(rv);
+    });
+    if (note) note.textContent = dragonReviewSummary(r);
+  } catch (e) {
+    if (note) note.textContent = I18N.t('dragon.reviewFail', { msg: e.message });
+  }
+}
+
+// ---------- 版本提醒 ----------
 function renderVersion(v) {
   if (!v) return;
   lastVersionInfo = v;
@@ -1747,14 +1830,9 @@ function renderVersion(v) {
   if (av) av.textContent = I18N.t('version.current', { v: v.current });
   const verEl = $('ver');
   if (verEl && v.current) verEl.textContent = 'v' + v.current;
-  const banner = $('updateBanner');
-  if (v.hasUpdate) {
-    $('updateText').textContent = I18N.t('version.new', { v: v.latest }) + (v.announcement ? '：' + v.announcement : '');
-    if (banner) banner.classList.remove('hidden');
-  }
   const info = $('updateInfo');
   if (info) {
-    info.innerHTML = `<p class="dim">${v.hasUpdate ? I18N.t('version.latestNew', { v: esc(v.latest) }) : I18N.t('version.latest', { v: esc(v.latest) })}${v.announcement ? I18N.t('version.announcement', { a: esc(v.announcement) }) : ''}｜<a href="#" class="link" id="linkVersion">${I18N.t('version.github')}</a></p>`;
+    info.innerHTML = `<p class="dim"><a href="#" class="link" id="linkVersion">${I18N.t('version.github')}</a></p>`;
     const lv = $('linkVersion');
     if (lv) lv.addEventListener('click', (e) => { e.preventDefault(); openLink(GITHUB_URL); });
   }
@@ -1772,20 +1850,6 @@ function bindUI() {
   on('btnBrowse', 'click', async () => {
     const dir = await BA.selectDir();
     if (dir) $('setLogDir').value = dir;
-  });
-  on('btnHeartbeatTest', 'click', async () => {
-    const cfg = await BA.getConfig().catch(() => null);
-    const url = (cfg && cfg.heartbeatUrl) || '';
-    const el = $('heartbeatTest');
-    el.textContent = I18N.t('dev.testing');
-    try {
-      const r = await BA.pingHeartbeat(url);
-      if (!r) { el.textContent = I18N.t('dev.heartbeatNotInit'); return; }
-      if (r.ok && r.stats) el.textContent = I18N.t('dev.heartbeatOk', { t: r.lastPing, n: r.stats.online });
-      else el.textContent = '❌ ' + (r.lastError || I18N.t('dev.heartbeatFail'));
-    } catch (e) {
-      el.textContent = I18N.t('dev.testFail', { msg: e.message });
-    }
   });
   on('btnDetect', 'click', async () => {
     const dir = await BA.detectDir();
@@ -1810,17 +1874,15 @@ function bindUI() {
     BA.queryCurrentMatch().catch(() => { querying = false; });
   });
 
-  on('btnMaggot', 'click', () => {
+  on('btnDragon', 'click', () => {
     if (!lastReport) { setStatus(I18N.t('dev.needSearchFirst'), false); return; }
-    runMaggot(lastReport.id, lastReport.name);
+    runDragon(lastReport.id, lastReport.name);
   });
-  on('btnUpdateClose', 'click', () => $('updateBanner').classList.add('hidden'));
   on('btnBatraceGateClose', 'click', () => { const b = $('batraceGateBanner'); if (b) b.classList.add('hidden'); });
-  on('btnUpdateDownload', 'click', () => { if (lastVersionInfo && lastVersionInfo.url) openLink(lastVersionInfo.url); });
-  on('btnAnnouncementClose', 'click', () => $('announcementModal').classList.add('hidden'));
   const link = (id, url) => { const el = $(id); if (el) el.addEventListener('click', (e) => { e.preventDefault(); openLink(url); }); };
   link('linkBatrace', BATRACE_URL);
   link('linkMaggotSite', MAGGOT_SITE_URL);
+  link('linkFfmpeg', 'https://github.com/BtbN/FFmpeg-Builds');
 
   // 搜索
   const doSearch = async () => {
@@ -1851,7 +1913,7 @@ function bindUI() {
   // 玩家调查弹窗 / 封禁 / 主题
   on('btnInvClose', 'click', () => { clearInvGameTimer(); stopRadarLoading(); $('investigateModal').classList.add('hidden'); });
   on('btnInvRefresh', 'click', () => { if (invId) { $('invInfo').textContent = I18N.t('loading.detail'); loadInvestigate(invId); } });
-  on('btnInvMaggot', 'click', () => { if (invId) { $('investigateModal').classList.add('hidden'); runMaggot(invId, invName); } });
+  on('btnInvDragon', 'click', () => { if (invId) { $('investigateModal').classList.add('hidden'); runDragon(invId, invName); } });
   on('btnInvOpen', 'click', () => { if (invId) openLink(PLAYER_URL(invId)); });
   on('btnBanCheaters', 'click', toggleBanCheaters);
   on('btnBanAlertClose', 'click', () => $('banAlertModal').classList.add('hidden'));
@@ -1873,7 +1935,6 @@ function bindUI() {
   });
   on('btnTestMatchSync', 'click', async () => { const r = await BA.syncMyMatchesNow(); $('testResult').textContent = (r && r.message) || I18N.t('dev.unknown'); });
   on('btnTestBanSync', 'click', async () => { const r = await BA.syncBans(); $('testResult').textContent = (r && r.newly != null) ? I18N.t('dev.banCheckDoneN', { n: r.newly }) : I18N.t('dev.banCheckDone'); });
-  on('btnTestVersion', 'click', async () => { const r = await BA.testVersionUpdate(); $('testResult').textContent = (r && r.message) || I18N.t('dev.unknown'); });
   on('btnTestRecord', 'click', async () => {
     $('testResult').textContent = I18N.t('dev.recTestStart');
     const r = await BA.testRecord();
@@ -1927,7 +1988,10 @@ function bindUI() {
     if (cur) sel.value = cur;
     if (!sel.value && list.length) sel.value = list[0].id;
   });
-  ['recQualityRange', 'recFpsRange', 'recBitrateRange'].forEach((rid) => {
+  on('recQuality', 'change', updateRecEstimate);
+  on('recExposureRange', 'input', () => { recSliderLabels(); recPreviewRerender(); });
+  on('btnRecPreview', 'click', recPreviewCapture);
+  ['recFpsRange', 'recBitrateRange'].forEach((rid) => {
     on(rid, 'input', () => { updateRecEstimate(); });
   });
   on('recAudio', 'change', updateRecEstimate);
@@ -2093,7 +2157,6 @@ function applyLangUI() {
   if (archiveList && archiveList.length) renderArchive(archiveList);
   renderReplayList();
   if (lastVersionInfo) renderVersion(lastVersionInfo);
-  if (lastHeartbeat) renderHeartbeat(lastHeartbeat);
   if (currentCfg) renderReplayNote(currentCfg);
   const st = $('statusText');
   if (st && st.dataset.i18n) st.textContent = I18N.t(st.dataset.i18n);
@@ -2212,8 +2275,6 @@ async function init() {
       setTimeout(() => b.classList.add('hidden'), 6000);
     }
   });
-  BA.onHeartbeat(renderHeartbeat);
-  BA.getHeartbeat().then(renderHeartbeat).catch(() => {});
   BA.onApiHealth(renderApiHealth);
   BA.getApiHealth().then(renderApiHealth).catch(() => {});
   BA.getBans().then(renderBans).catch(() => {});
@@ -2226,7 +2287,6 @@ async function init() {
     if (d.ok) { el.textContent = I18N.t('status.recTestDone', { file: d.file, size: fmtSize(d.size) }); refreshLocalReplayList(); renderReplayList(); }
     else { el.textContent = I18N.t('status.recTestFailed', { msg: d.error || I18N.t('common.unknown') }); }
   });
-  BA.onRoomToolUsers((ids) => { toolUserIds = new Set((ids || []).map(String)); const cur = session && session.current; if (cur) renderMatchGrid(); else renderMatchGrid(); });
   BA.onReplayRecording((d) => {
     replayRecordingActive = !!(d && d.active && !d.error);
     if (d && d.error) { const el = $('replayStatus'); if (el) { el.textContent = I18N.t('replay.recError', { msg: d.error }); el.title = I18N.t('replay.recErrorDetail'); } setReplayPreview(false); return; }
@@ -2260,14 +2320,7 @@ async function init() {
     const card = e.target.closest('.player-card');
     if (card && card.dataset.id) loadReport(card.dataset.id, card.dataset.name);
   });
-  BA.onMaggotProgress((d) => {
-    const pct = d.total ? (d.done / d.total) * 100 : 0;
-    setMaggotProgress(I18N.t('maggot.progress', { done: d.done, total: d.total, scanned: d.scanned, of: d.of }), pct);
-  });
   BA.getVersion().then(renderVersion).catch(() => {});
-  BA.onVersion(renderVersion);
-  BA.onBypassState(renderBypassHint);
-  BA.onAnnouncement((d) => { if (d && d.text) { const el = $('announcementText'); if (el) el.textContent = d.text; $('announcementModal').classList.remove('hidden'); } });
 }
 
 // 兜底：任何异步错误都显示出来，而不是“点了没反应”

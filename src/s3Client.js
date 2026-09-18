@@ -1,17 +1,18 @@
 // ================= 录像对象名编解码（对局录像用） =================
 // 上传/列表/删除现在全部走 Cloudflare Worker（R2 binding），App 不再直连 S3，这里只保留对象名编解码。
 
-// 录像对象名：replays/{fid}__{uploaderId}__{teamId}__{mapId}__{ts}__{nameHex}.webm
+// 录像对象名：replays/{fid}__{uploaderId}__{teamId}__{mapId}__{ts}__{nameHex}.mp4（旧版录像为 .webm）
 // nameHex = 上传者名字 UTF-8 的 hex（避免分隔符/特殊字符冲突）
-function encodeReplayKey({ fid, uploaderId, uploaderName, teamId, mapId, ts }) {
+function encodeReplayKey({ fid, uploaderId, uploaderName, teamId, mapId, ts, ext }) {
   const nameHex = Buffer.from(String(uploaderName || ''), 'utf8').toString('hex');
-  return 'replays/' + String(fid) + '__' + String(uploaderId) + '__' + (teamId == null ? '' : teamId) + '__' + (mapId == null ? '' : mapId) + '__' + (ts || Date.now()) + '__' + nameHex + '.webm';
+  return 'replays/' + String(fid) + '__' + String(uploaderId) + '__' + (teamId == null ? '' : teamId) + '__' + (mapId == null ? '' : mapId) + '__' + (ts || Date.now()) + '__' + nameHex + '.' + (ext || 'mp4');
 }
 
 function parseReplayKey(key) {
   const base = String(key || '').split('/').pop() || '';
-  if (!base.endsWith('.webm')) return null;
-  const parts = base.slice(0, -5).split('__');
+  const m = base.match(/^(.*)\.(webm|mp4)$/i);
+  if (!m) return null;
+  const parts = m[1].split('__');
   if (parts.length < 6) return null;
   const [fid, uploaderId, teamId, mapId, ts, nameHex] = parts;
   let uploaderName = '';
@@ -27,4 +28,8 @@ function parseReplayKey(key) {
   };
 }
 
-module.exports = { encodeReplayKey, parseReplayKey };
+// 本地录像文件：新版 .mp4，旧版 .webm（以 . 开头的是录制中的临时目录/文件）
+const REPLAY_EXT_RE = /\.(webm|mp4)$/i;
+function isReplayFile(name) { const n = String(name || ''); return REPLAY_EXT_RE.test(n) && !n.startsWith('.'); }
+
+module.exports = { encodeReplayKey, parseReplayKey, isReplayFile, REPLAY_EXT_RE };

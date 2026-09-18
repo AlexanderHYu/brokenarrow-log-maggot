@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; media-src 'self' blob: data:; connect-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; media-src 'self' blob: data: replay:; connect-src 'self'" />
   <title data-i18n="app.title">断箭蛆工具 byZola</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -19,7 +19,6 @@
       <span id="fileText" class="dim"></span>
       <span id="budgetText" class="dim" data-i18n-title="budget.title"></span>
       <span id="apiHealth" class="api-health" data-i18n-title="api.checking">BATrace ●</span>
-      <span id="onlineText" class="online" data-i18n-title="status.onlineTitle">● 0 人正在使用</span>
     </div>
     <div class="actions">
       <div class="lang-switch">
@@ -37,12 +36,6 @@
     <div id="batraceGateBanner" class="update-banner hidden">
       <span id="batraceGateText"></span>
       <button id="btnBatraceGateClose" class="btn btn-ghost light">✕</button>
-    </div>
-
-    <div id="updateBanner" class="update-banner hidden">
-      <span id="updateText"></span>
-      <button id="btnUpdateDownload" class="btn btn-ghost light" data-i18n="common.downloadNew">⬇ 下载新版本</button>
-      <button id="btnUpdateClose" class="btn btn-ghost light">✕</button>
     </div>
 
     <!-- 当前房间 / 当前对局粗查 -->
@@ -127,26 +120,21 @@
       <div id="deckMsg" class="deck-msg dim"></div>
     </section>
 
-    <!-- 玩家查询：搜索 → 粗查预览 → 蛆指数 -->
+    <!-- 玩家查询：搜索 → 粗查预览 → 龙区分 -->
     <section class="card" id="maggotCard">
       <div class="card-head">
-        <h2 data-i18n="card.maggot">🔍 玩家查蛆指数</h2>
-        <span id="maggotCalls" class="dim"></span>
+        <h2 data-i18n="card.maggot">🔍 玩家查询 · 龙区分</h2>
+        <span id="dragonCalls" class="dim"></span>
       </div>
       <div class="search-row">
         <input id="searchInput" type="text" data-i18n-placeholder="search.ph" placeholder="输入玩家名或 ID，回车搜索" />
         <button id="btnSearch" class="btn" data-i18n="btn.search">搜索</button>
-        <button id="btnMaggot" class="btn btn-accent" data-i18n="btn.maggot">🐛 查蛆指数</button>
+        <button id="btnDragon" class="btn btn-accent" data-i18n="btn.dragon">🐉 查龙区分</button>
       </div>
-      <div id="maggotProgressRow" class="maggot-progress hidden">
-        <span id="maggotProgressText" class="dim"></span>
-        <span class="maggot-progress-track"><i id="maggotProgressBar"></i></span>
-        <em id="maggotProgressPct" class="dim"></em>
-      </div>
-      <div class="hint dim" data-i18n="maggot.hint">搜索 → 点结果看粗查预览（1 次调用，数据有数天延迟）→ 点「查蛆指数」看蛆指数（冷查约 13 次调用，24 小时缓存后仅 1 次）。</div>
+      <div class="hint dim" data-i18n="dragon.hint">搜索 → 点结果看粗查预览 → 点「查龙区分」看龙区分：越高越像龙，越低越像区（1 次调用，1 小时缓存）。</div>
       <div id="searchResults" class="search-results"></div>
       <div id="reportArea"></div>
-      <div id="maggotArea"></div>
+      <div id="dragonArea"></div>
     </section>
 
     <!-- 封禁追踪 -->
@@ -216,21 +204,12 @@
       <div class="about-body">
         <p><b data-i18n="about.principlesTitle">软件原理</b><span data-i18n="about.principlesBody">：本工具只读取游戏官方公开的日志文件（GameLogs）与查询网站的公开接口，不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊，仅作赛后复盘参考。</span></p>
         <p><b data-i18n="about.creditsTitle">数据致谢</b><span data-i18n="about.creditsPre">：玩家数据由 </span><a id="linkBatrace" href="#" class="link" data-i18n="about.linkBatrace">BATrace 查询站</a><span data-i18n="about.creditsMid"> 提供；蛆指数算法与 </span><a id="linkMaggotSite" href="#" class="link" data-i18n="about.linkMaggotSite">断箭蛆指数网站</a><span data-i18n="about.creditsPost"> 保持同步。</span></p>
+        <p><b data-i18n="about.ffmpegTitle">录像组件</b><span data-i18n="about.ffmpegBody">：录像使用 FFmpeg（GPL 协议）编码，源码与构建脚本见 </span><a id="linkFfmpeg" href="#" class="link">FFmpeg-Builds</a></p>
         <div id="updateInfo" class="update-info"></div>
       </div>
     </section>
   </main>
 
-  <!-- 公告弹窗（每次启动有公告就弹一次） -->
-  <div id="announcementModal" class="modal hidden">
-    <div class="modal-box small">
-      <div class="modal-head">
-        <span class="inv-name" data-i18n="modal.announcement">📢 公告</span>
-        <button id="btnAnnouncementClose" class="btn btn-ghost" style="margin-left:auto">✕</button>
-      </div>
-      <div id="announcementText" style="white-space:pre-wrap;line-height:1.7;font-size:13px"></div>
-    </div>
-  </div>
   <!-- 确认弹窗 -->
   <div id="confirmModal" class="modal hidden">
     <div class="modal-box small">
@@ -257,10 +236,6 @@
       </div>
       <label class="check"><input id="setAuto" type="checkbox" /> <span data-i18n="settings.autoQuery">检测到对局后自动粗查玩家</span></label>
       <label class="check"><input id="setInputHook" type="checkbox" /> <span data-i18n="settings.apm">APM 监测功能（全局鼠标+键盘钩子，只读不拦截；默认关闭，开启前请自行评估反作弊风险）</span></label>
-      <div class="row">
-        <button id="btnHeartbeatTest" class="btn btn-ghost" data-i18n="settings.testHeartbeat">测试心跳</button>
-        <span id="heartbeatTest" class="dim"></span>
-      </div>
       <label data-i18n="settings.theme">主题</label>
       <div class="theme-picker" id="themePicker">
         <button type="button" class="theme-swatch" data-theme="dark" data-i18n-title="theme.darkTitle"><i style="background:#0d1017"></i><span data-i18n="theme.dark">黑</span></button>
@@ -299,10 +274,8 @@
           <button type="button" id="btnTestBanNotify" class="btn btn-ghost" data-i18n="settings.devBanNotify">测试封禁提醒（遇到过）</button>
           <button type="button" id="btnTestMatchSync" class="btn btn-ghost" data-i18n="settings.devSyncNow">立即同步我的对局</button>
           <button type="button" id="btnTestBanSync" class="btn btn-ghost" data-i18n="settings.devBanCheck">立即检查封禁</button>
-          <button type="button" id="btnTestVersion" class="btn btn-ghost" data-i18n="settings.devVersion">测试版本更新推送</button>
           <button type="button" id="btnTestRecord" class="btn btn-ghost" data-i18n="settings.devRecord">🎥 录制测试（1 分钟·只存本地）</button>
         </div>
-        <div id="bypassHint" class="dim" style="font-size:11px;color:#8b94a3;margin-top:4px"></div>
         <div id="testResult" class="dim"></div>
       </div>
       <div class="modal-actions">
@@ -336,7 +309,7 @@
         <div class="inv-section"><b data-i18n="inv.names">改名历史</b><div id="invNames" class="inv-list"></div></div>
         <div class="inv-actions">
           <button id="btnInvRefresh" class="btn btn-ghost" data-i18n="inv.refresh">↻ 刷新情报</button>
-          <button id="btnInvMaggot" class="btn btn-accent" data-i18n="btn.maggot">🐛 查蛆指数</button>
+          <button id="btnInvDragon" class="btn btn-accent" data-i18n="btn.dragon">🐉 查龙区分</button>
           <button id="btnInvOpen" class="btn btn-ghost" data-i18n="ctx.openBatrace">🌐 在 BATrace 打开</button>
         </div>
       </div>
@@ -387,15 +360,13 @@
           </div>
         </div>
         <div class="rec-field">
-          <div class="rec-label"><span data-i18n="rec.resolution">分辨率</span> <span id="recQualityVal" class="dim rec-val">720p</span></div>
-          <input type="range" id="recQualityRange" class="rec-range" min="240" max="1080" step="120" list="qualityTicks" />
-          <datalist id="qualityTicks">
-            <option value="240" label="240p"></option>
-            <option value="360" label="360p"></option>
-            <option value="480" label="480p"></option>
-            <option value="720" label="720p"></option>
-            <option value="1080" label="1080p"></option>
-          </datalist>
+          <div class="rec-label" data-i18n="rec.resolution">分辨率</div>
+          <select id="recQuality" class="rec-select">
+            <option value="0" data-i18n="rec.qualityNative">原生分辨率（纯 GPU，几乎不占 CPU）</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+          </select>
         </div>
         <div class="rec-field">
           <div class="rec-label"><span data-i18n="rec.fps">帧数（每秒）</span> <span id="recFpsVal" class="dim rec-val">30 fps</span></div>
@@ -403,7 +374,7 @@
         </div>
         <div class="rec-field">
           <div class="rec-label"><span data-i18n="rec.bitrate">画质码率</span> <span id="recBitrateVal" class="dim rec-val">5 Mbps</span></div>
-          <input type="range" id="recBitrateRange" class="rec-range" min="3" max="10" step="1" />
+          <input type="range" id="recBitrateRange" class="rec-range" min="3" max="40" step="1" />
         </div>
         <div class="rec-field">
           <div class="rec-label" data-i18n="rec.estSize">预计 45 分钟文件大小</div>
@@ -417,6 +388,26 @@
             <option value="off" data-i18n="rec.audioOff">关闭</option>
           </select>
           <div class="dim rec-hint" data-i18n="rec.audioHint">Chromium 仅支持回环系统默认输出，无法指定其它声卡。</div>
+        </div>
+        <div class="rec-field">
+          <div class="rec-label"><span data-i18n="rec.exposure">曝光补偿</span> <span id="recExposureVal" class="dim rec-val">0 EV</span></div>
+          <input type="range" id="recExposureRange" class="rec-range" min="-2" max="2" step="0.25" />
+          <div class="dim rec-hint" data-i18n="rec.exposureHint">录像偏暗往右拉，偏亮往左拉；每 +1 EV 亮度翻倍。可以用下面的预览边调边看。</div>
+        </div>
+        <div class="rec-field rec-preview">
+          <div class="rec-label" data-i18n="rec.preview">📷 录制效果预览</div>
+          <div class="search-row" style="flex-wrap:wrap;align-items:center">
+            <button type="button" id="btnRecPreview" class="btn btn-ghost" data-i18n="rec.previewCapture">截取画面</button>
+            <select id="recPreviewDelay" class="rec-select" style="min-width:0">
+              <option value="0" data-i18n="rec.previewNow">立即</option>
+              <option value="5" data-i18n="rec.preview5s">5 秒后（先切到游戏）</option>
+              <option value="10" data-i18n="rec.preview10s">10 秒后（先切到游戏）</option>
+            </select>
+          </div>
+          <div id="recPreviewInfo" class="dim rec-hint" data-i18n="rec.previewHint">开着游戏时截一张，看看录出来是什么样；单屏玩家选「5 秒后」再切到游戏。</div>
+          <div class="rec-preview-imgs">
+            <figure id="recPreviewNewFig" class="hidden"><img id="recPreviewImg" alt="" /><figcaption data-i18n="rec.previewNew">录制效果</figcaption></figure>
+          </div>
         </div>
         <div class="rec-field">
           <div class="rec-label" data-i18n="rec.saveDir">保存目录</div>

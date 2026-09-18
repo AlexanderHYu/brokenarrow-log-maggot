@@ -35,3 +35,9 @@ admin/
 
 # 云端 Worker 代码（心跳服务/版本发布，仅本地部署粘贴到 Cloudflare，不提交）
 server/
+
+# 本地 FFmpeg 二进制（BtbN 构建，按需下载，不入库）
+vendor/
+
+# 龙区分数回测拉取的原始数据（本地缓存，不入库）
+backtest-data/

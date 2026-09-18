@@ -386,11 +386,6 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-widt
   border: 1px solid var(--maggot-badge-line); color: var(--maggot-badge-text);
 }
 /* 查蛆指数进度条（按钮行正下方一行） */
-.maggot-progress { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; font-size: 12px; }
-.maggot-progress.hidden { display: none; }
-.maggot-progress-track { flex: 1 1 auto; max-width: 260px; height: 8px; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.06); }
-.maggot-progress-track i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 999px; transition: width .2s; }
-.maggot-progress em { font-style: normal; min-width: 34px; text-align: left; }
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .kv .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
 .kv .item b { display: block; font-size: 15px; color: var(--text); }
@@ -850,5 +845,36 @@ table.matches tbody tr:hover { background: var(--row-hover); }
 .rec-dir { font-size: 12px; word-break: break-all; flex: 1; }
 .rec-range { width: 100%; accent-color: var(--accent, #4ade80); cursor: pointer; }
 .rec-val { font-weight: 700; color: var(--accent, #4ade80); }
+.rec-preview-imgs { display: flex; flex-direction: column; gap: 8px; }
+.rec-preview-imgs figure { margin: 0; }
+.rec-preview-imgs img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 8px; background: #000; border: 1px solid var(--line); }
+.rec-preview-imgs figcaption { font-size: 11px; color: var(--muted, #8b94a3); margin-top: 3px; }
 .replay-list-wrap { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
 .replay-list-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+
+/* 龙区分：刻度从左「区」（红）到右「龙」（金），与蛆指数方向相反 */
+.dg-track { background: linear-gradient(90deg, #ef4444, #94a3b8 50%, #facc15); }
+/* 龙区分的可能范围（卡尔曼滤波 ±1 个标准差） */
+.dg-range { position: absolute; top: -2px; height: 16px; border-radius: 8px; background: rgba(255, 255, 255, 0.28); border: 1px solid rgba(255, 255, 255, 0.6); }
+.dg-parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 16px; margin: 12px 0; font-size: 12px; }
+.dg-part { display: flex; align-items: center; gap: 8px; }
+.dg-part > span:first-child { min-width: 64px; color: var(--dim); }
+.dg-bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid var(--line); overflow: hidden; position: relative; }
+.dg-bar i { display: block; height: 100%; background: var(--accent); }
+.dg-bar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--dim); opacity: .7; } /* 50 = 普通 */
+.dg-part b { min-width: 26px; text-align: right; }
+.dg-reasons { margin: 6px 0 10px; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.dg-mark { display: inline-flex; align-items: center; justify-content: center; font-weight: 900; border-radius: 6px; min-width: 20px; height: 20px; font-size: 13px; padding: 0 3px; vertical-align: middle; }
+.dg-mark.big { min-width: 28px; height: 28px; font-size: 20px; margin-right: 6px; flex: none; }
+.dg-mark.dragon { color: #1c1400; background: linear-gradient(135deg, #fde047, #f59e0b); box-shadow: 0 0 8px rgba(250,204,21,.45); }
+.dg-mark.qu { color: #fff; background: #b91c1c; }
+.dg-mark.min { color: var(--dim); background: rgba(148,163,184,.18); border: 1px solid var(--line); }
+.dg-tag { font-size: 11px; padding: 1px 6px; border-radius: 999px; margin-left: 4px; white-space: nowrap; flex: none; }
+/* 称号：好（金）/ 坏（红）/ 中性（灰） */
+.dg-tag { cursor: help; }
+.dg-tag.good { background: rgba(250,204,21,.18); color: #eab308; border: 1px solid rgba(250,204,21,.45); }
+.dg-tag.bad { background: rgba(239,68,68,.15); color: #ef4444; border: 1px solid rgba(239,68,68,.4); }
+.dg-tag.neutral { background: rgba(148,163,184,.15); color: var(--dim); border: 1px solid var(--line); }
+.dg-score { font-size: 11px; color: var(--dim); margin-left: 4px; flex: none; }
+.md-dragon { white-space: nowrap; }
+#prevReviewStatus { color: var(--accent); }

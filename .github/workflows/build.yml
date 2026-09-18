@@ -26,6 +26,9 @@ jobs:
       - name: 安装依赖
         run: npm install --no-audit --no-fund
 
+      - name: 下载 FFmpeg（录像用，带 SHA256 校验）
+        run: npm run fetch-ffmpeg
+
       - name: 打包（nsis 安装版 + portable 便携版）
         run: npm run dist
 
