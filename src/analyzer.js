@@ -123,7 +123,6 @@ class Analyzer {
     }
     const r = computeDragonScore({ stbid: sid, matches: (res && res.matches) || [], categoryPreferences: analysis && analysis.categoryPreferences, highlightUnits: analysis && analysis.highlightUnits });
     if (!r.error) for (const row of r.rows) row.map = row.mapId != null ? mapName(row.mapId) : '';
-    r.calls = this.client.networkCalls || 0;
     return r;
   }
 

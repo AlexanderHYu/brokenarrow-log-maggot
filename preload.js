@@ -21,7 +21,6 @@ contextBridge.exposeInMainWorld('api', {
   onMatchQuerying: (cb) => ipcRenderer.on('match:querying', (e, d) => cb(d)),
   onMatchPlayer: (cb) => ipcRenderer.on('match:player', (e, d) => cb(d)),
   onMatchDone: (cb) => ipcRenderer.on('match:done', (e, d) => cb(d)),
-  onBudget: (cb) => ipcRenderer.on('budget', (e, d) => cb(d)),
   onBatraceGate: (cb) => ipcRenderer.on('batrace:gate', (e, d) => cb(d)),
 
   // 查询
@@ -33,8 +32,7 @@ contextBridge.exposeInMainWorld('api', {
   // 版本
   getVersion: () => ipcRenderer.invoke('app:version'),
 
-  // API 用量 + 心跳
-  getUsage: () => ipcRenderer.invoke('usage:get'),
+  // BATrace 稳定性
   getApiHealth: () => ipcRenderer.invoke('api:health'),
   onApiHealth: (cb) => ipcRenderer.on('api:health', (e, d) => cb(d)),
 
@@ -47,7 +45,6 @@ contextBridge.exposeInMainWorld('api', {
   getPlayerProfile: (id) => ipcRenderer.invoke('tracker:profile', id),
   getBans: () => ipcRenderer.invoke('tracker:getBans'),
   syncBans: () => ipcRenderer.invoke('tracker:syncBans'),
-  testBanNotify: () => ipcRenderer.invoke('test:banNotify'),
   syncMyMatchesNow: () => ipcRenderer.invoke('match:syncNow'),
   getTrackerMatches: () => ipcRenderer.invoke('tracker:matches'),
   getMatchDetail: (fid) => ipcRenderer.invoke('tracker:matchDetail', fid),
@@ -72,14 +69,12 @@ contextBridge.exposeInMainWorld('api', {
   replayPreviewRender: (exposure) => ipcRenderer.invoke('replay:previewRender', exposure),
   openLocalReplayFolder: () => ipcRenderer.invoke('replay:openLocalFolder'),
   getReplayDirInfo: () => ipcRenderer.invoke('replay:dirInfo'),
-  testRecord: () => ipcRenderer.invoke('replay:testRecord'),
   listDisplays: () => ipcRenderer.invoke('replay:displays'),
   setReplayDisplay: (id) => ipcRenderer.invoke('replay:setDisplay', id),
   selectReplaySaveDir: () => ipcRenderer.invoke('replay:selectSaveDir'),
   setReplaySaveDir: (dir) => ipcRenderer.invoke('replay:setSaveDir', dir),
   moveReplays: (from, to) => ipcRenderer.invoke('replay:moveReplays', { from, to }),
   getScreenThumbnail: (displayId) => ipcRenderer.invoke('replay:screenThumbnail', displayId),
-  onTestResult: (cb) => ipcRenderer.on('replay:testResult', (e, d) => cb(d)),
   onReplayRecording: (cb) => ipcRenderer.on('replay:recording', (e, d) => cb(d)),
   onReplayPreview: (cb) => ipcRenderer.on('replay:preview', (e, d) => cb(d)),
   onReplayProgress: (cb) => ipcRenderer.on('replay:progress', (e, d) => cb(d)),
@@ -99,12 +94,6 @@ contextBridge.exposeInMainWorld('api', {
   syncDismiss: () => ipcRenderer.invoke('deck:syncDismiss'),
   openDeckFolder: (kind) => ipcRenderer.invoke('deck:openFolder', kind),
   onDeckChanged: (cb) => ipcRenderer.on('deck:changed', (e, d) => cb(d)),
-  onDeckSyncAlert: (cb) => ipcRenderer.on('deck:syncAlert', (e, d) => cb(d)),
-
-  // APM 统计
-  onApmStart: (cb) => ipcRenderer.on('apm:start', (e, d) => cb(d)),
-  onApmLive: (cb) => ipcRenderer.on('apm:live', (e, d) => cb(d)),
-  onApmResult: (cb) => ipcRenderer.on('apm:result', (e, d) => cb(d)),
-  onApmIdle: (cb) => ipcRenderer.on('apm:idle', (e, d) => cb(d))
+  onDeckSyncAlert: (cb) => ipcRenderer.on('deck:syncAlert', (e, d) => cb(d))
 });
 

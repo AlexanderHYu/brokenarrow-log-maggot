@@ -21,21 +21,6 @@ function setStatus(text, ok) {
   $('statusText').textContent = text;
   $('listenDot').className = 'dot ' + (ok ? 'on' : 'off');
 }
-// 顶栏：24h API 配额显示（缓存命中不计入）
-function renderBudget(d) {
-  if (!d) return;
-  const t = $('budgetText');
-  if (!t) return;
-  const used = d.used24h || 0;
-  const limit = d.limit24h || 0;
-  let text = limit > 0 ? I18N.t('budget.used', { used, limit }) : I18N.t('budget.unlimited', { used });
-  if (d.skipped) text += I18N.t('status.skipN', { n: d.skipped });
-  if (d.finished) text += ' ✓';
-  t.textContent = text;
-  const exhausted = limit > 0 && used >= limit;
-  t.classList.toggle('warn', exhausted);
-  t.title = exhausted ? I18N.t('status.budgetExhausted') : '';
-}
 // 顶栏：BATrace API 稳定性灯（绿=全通 / 黄=部分 / 红=全挂 / 灰=未检测）
 function renderApiHealth(d) {
   const el = $('apiHealth');
@@ -805,66 +790,6 @@ async function doDelete(kind, label) {
 }
 
 // ---------- 设置 ----------
-// ---------- APM 统计 ----------
-let apmRunning = false;
-function renderApmStart(d) {
-  const meta = $('apmMeta');
-  const body = $('apmBody');
-  if (!d || !d.available) {
-    apmRunning = false;
-    const reason = !d ? I18N.t('apm.unavailable')
-      : d.reason === 'disabled' ? I18N.t('apm.reasonDisabled')
-      : d.reason === 'replay' ? I18N.t('apm.reasonReplay')
-      : d.reason === 'hook' ? I18N.t('apm.reasonHook')
-      : I18N.t('apm.unavailable');
-    if (meta) meta.textContent = I18N.t('apm.unavailableShort');
-    if (body) body.innerHTML = `<div class="apm-empty loss">⚠️ ${reason}</div>`;
-    return;
-  }
-  apmRunning = true;
-  if (meta) meta.textContent = d.map ? I18N.t('apm.ingameMap', { map: esc(d.map) }) : I18N.t('apm.ingame');
-  if (body) body.innerHTML = `<div class="apm-live"><div class="apm-bignum" id="apmNow">0</div><div class="apm-live-label">${I18N.t('apm.currentLabel')}</div><div class="dim" id="apmLiveSub">${I18N.t('apm.counting')}</div></div>`;
-}
-function renderApmLive(d) {
-  if (!apmRunning || !d) return;
-  const now = $('apmNow');
-  if (now) now.textContent = d.apm;
-  const sub = $('apmLiveSub');
-  if (sub) sub.textContent = I18N.t('apm.elapsed', { dur: fmtDuration(d.durationSec), n: d.totalActions });
-}
-function renderApmResult(r) {
-  if (!r) return;
-  apmRunning = false;
-  const focusNote = r.focusFilter ? '' : '<span class="dim">' + I18N.t('apm.noFocusFilter') + '</span>';
-  const max = Math.max(1, ...(r.perMinute || [1]));
-  const bars = (r.minutes || []).map((m) => {
-    const pct = Math.max(3, Math.round((m.actions / max) * 100));
-    return `<div class="apm-bar-wrap" title="${I18N.t('apm.minuteTitle', { n: m.m + 1, c: m.actions })}"><div class="apm-bar" style="height:${pct}%"></div>${m.m % 5 === 0 ? '<span class="apm-min">' + (m.m + 1) + '</span>' : ''}</div>`;
-  }).join('');
-  const noData = r.totalActions <= 0 ? '<div class="dim">' + I18N.t('apm.noData') + '</div>' : '';
-  const meta = $('apmMeta');
-  if (meta) meta.textContent = I18N.t('apm.ended', { dur: fmtDuration(r.durationSec), n: r.totalActions, avg: r.avg, peak: r.peak });
-  const body = $('apmBody');
-  if (body) body.innerHTML = `
-    <div class="apm-summary">
-      <span class="apm-stat"><b>${r.totalActions}</b>${I18N.t('apm.totalOps')}</span>
-      <span class="apm-stat"><b>${r.avg}</b>${I18N.t('apm.avgApm')}</span>
-      <span class="apm-stat"><b>${r.peak}</b>${I18N.t('apm.peakApm')}</span>
-      <span class="apm-stat"><b>${fmtDuration(r.durationSec)}</b>${I18N.t('apm.duration')}</span>
-    </div>
-    <div class="apm-chart">${bars}</div>
-    <div class="dim note">${I18N.t('apm.source')}${focusNote}</div>
-    ${noData}
-  `;
-}
-function renderApmIdle() {
-  apmRunning = false;
-  const meta = $('apmMeta');
-  if (meta) meta.textContent = I18N.t('apm.waiting');
-  const body = $('apmBody');
-  if (body) body.innerHTML = '<div class="apm-empty dim">' + I18N.t('apm.idleHint') + '</div>';
-}
-
 function setDeckCollapsed(collapsed) {
   const card = $('deckCard');
   if (!card) return;
@@ -872,27 +797,12 @@ function setDeckCollapsed(collapsed) {
   const btn = $('btnDeckToggle');
   if (btn) btn.title = collapsed ? I18N.t('apm.expand') : I18N.t('apm.collapse');
 }
-function setApmCollapsed(collapsed) {
-  const card = $('apmCard');
-  if (!card) return;
-  card.classList.toggle('collapsed', !!collapsed);
-  const btn = $('btnApmToggle');
-  if (btn) btn.title = collapsed ? I18N.t('apm.expand') : I18N.t('apm.collapse');
-}
-function setApmVisible(visible) {
-  const card = $('apmCard');
-  if (!card) return;
-  card.classList.toggle('hidden', !visible);
-  if (visible) setApmCollapsed(false);
-}
-
 function openSettings() {
   // 先立刻显示弹窗，再异步填充，避免“点了没反应”
   $('settingsModal').classList.remove('hidden');
   BA.getConfig().then((cfg) => {
     $('setLogDir').value = cfg.logDir || '';
     $('setAuto').checked = !!cfg.autoQueryCurrentMatch;
-    $('setInputHook').checked = !!cfg.inputHookEnabled;
     $('setBanPoll').checked = !!cfg.banPollEnabled;
     $('setMatchSync').checked = !!cfg.matchSyncEnabled;
     $('setBanCard').checked = !!cfg.banCardVisible;
@@ -1706,7 +1616,6 @@ function setDragonBusy(busy) {
 
 async function runDragon(stbid, name) {
   const area = $('dragonArea');
-  $('dragonCalls').textContent = '';
   setDragonBusy(true);
   area.innerHTML = '<div class="dim">' + esc(I18N.t('dragon.loading')) + '</div>';
   try {
@@ -1740,13 +1649,11 @@ function renderDragon(r, name) {
       <td class="dim">${Math.round(m.expected * 100)}%</td>
       <td>${m.kd.toFixed(2)}</td>
       <td>${m.contrib != null ? m.contrib.toFixed(2) + '×' : '-'}</td>
-      <td>${m.obj != null ? m.obj.toFixed(2) + '×' : '-'}</td>
       <td>${fmtDelta(m.eloDelta)}</td>
       <td><b>${m.score}</b></td>
       <td class="dim">${flags(m)}</td>
       <td class="dim" data-link="${MATCH_URL(m.fid)}" title="${I18N.t('common.rightClickBatrace')}">${esc(m.fid)}</td>
     </tr>`).join('');
-  $('dragonCalls').textContent = I18N.t('dragon.calls', { n: r.calls });
   // 角色：占比 ≥ 5% 的按占比从高到低列出
   const roleList = ['armor', 'inf', 'recon', 'arty', 'aa', 'heli', 'jet']
     .filter((k) => (r.roles[k] || 0) >= 5).sort((a, b) => r.roles[b] - r.roles[a])
@@ -1775,7 +1682,7 @@ function renderDragon(r, name) {
       </div>
       ${reasons ? `<ul class="dg-reasons">${reasons}</ul>` : ''}
       <table class="matches">
-        <thead><tr><th></th><th>${I18N.t('dragon.th.result')}</th><th>${I18N.t('dragon.th.map')}</th><th>${I18N.t('dragon.th.minutes')}</th><th>${I18N.t('dragon.th.expected')}</th><th>${I18N.t('dragon.th.kd')}</th><th>${I18N.t('dragon.th.contrib')}</th><th>${I18N.t('dragon.th.obj')}</th><th>${I18N.t('dragon.th.elo')}</th><th>${I18N.t('dragon.th.score')}</th><th></th><th>${I18N.t('dragon.th.fid')}</th></tr></thead>
+        <thead><tr><th></th><th>${I18N.t('dragon.th.result')}</th><th>${I18N.t('dragon.th.map')}</th><th>${I18N.t('dragon.th.minutes')}</th><th>${I18N.t('dragon.th.expected')}</th><th>${I18N.t('dragon.th.kd')}</th><th>${I18N.t('dragon.th.contrib')}</th><th>${I18N.t('dragon.th.elo')}</th><th>${I18N.t('dragon.th.score')}</th><th></th><th>${I18N.t('dragon.th.fid')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="dim note">${esc(I18N.t('dragon.algorithm'))}</div>
@@ -1822,27 +1729,21 @@ async function fillMatchReview(d) {
   }
 }
 
-// ---------- 版本提醒 ----------
+// ---------- 版本号 ----------
 function renderVersion(v) {
-  if (!v) return;
+  if (!v || !v.current) return;
   lastVersionInfo = v;
-  const av = $('aboutVer');
-  if (av) av.textContent = I18N.t('version.current', { v: v.current });
-  const verEl = $('ver');
-  if (verEl && v.current) verEl.textContent = 'v' + v.current;
-  const info = $('updateInfo');
-  if (info) {
-    info.innerHTML = `<p class="dim"><a href="#" class="link" id="linkVersion">${I18N.t('version.github')}</a></p>`;
-    const lv = $('linkVersion');
-    if (lv) lv.addEventListener('click', (e) => { e.preventDefault(); openLink(GITHUB_URL); });
-  }
+  for (const id of ['ver', 'aboutVer']) { const el = $(id); if (el) el.textContent = 'v' + v.current; }
 }
 
 function bindUI() {
   on('btnGame', 'click', () => { if (window.BAGame) BAGame.open(); });
   on('btnSettings', 'click', openSettings);
-  on('btnApmToggle', 'click', () => setApmCollapsed(!$('apmCard').classList.contains('collapsed')));
-  on('btnDeckToggle', 'click', () => setDeckCollapsed(!$('deckCard').classList.contains('collapsed')));
+  // 卡组工具折叠/展开，记住状态
+  const toggleDeck = () => { const c = !$('deckCard').classList.contains('collapsed'); setDeckCollapsed(c); BA.setConfig({ deckCollapsed: c }).catch(() => {}); };
+  on('btnDeckToggle', 'click', (e) => { e.stopPropagation(); toggleDeck(); });
+  const deckHead = document.querySelector('#deckCard .card-head');
+  if (deckHead) deckHead.addEventListener('click', (e) => { if (!e.target.closest('button')) toggleDeck(); });
   on('btnAddMatch', 'click', addMatchByFid);
   on('addMatchFid', 'keydown', (e) => { if (e.key === 'Enter') addMatchByFid(); });
   on('btnCancel', 'click', () => { setThemePicker(savedTheme); $('settingsModal').classList.add('hidden'); });
@@ -1922,24 +1823,6 @@ function bindUI() {
   on('themePicker', 'click', (e) => { const b = e.target.closest('.theme-swatch'); if (b) setThemePicker(b.dataset.theme); });
   const invModal = $('investigateModal');
   if (invModal) invModal.addEventListener('click', (e) => { if (e.target === invModal) { clearInvGameTimer(); stopRadarLoading(); invModal.classList.add('hidden'); } });
-
-  // 开发者测试（设置内）
-  on('btnTestBanNotify', 'click', () => {
-    // 关掉设置，3 秒后触发系统弹窗模拟提醒
-    $('settingsModal').classList.add('hidden');
-    setStatus(I18N.t('dev.banNotifySoon'), true);
-    setTimeout(async () => {
-      const r = await BA.testBanNotify();
-      setStatus((r && r.message) || I18N.t('dev.simFail'), !!(r && r.ok));
-    }, 3000);
-  });
-  on('btnTestMatchSync', 'click', async () => { const r = await BA.syncMyMatchesNow(); $('testResult').textContent = (r && r.message) || I18N.t('dev.unknown'); });
-  on('btnTestBanSync', 'click', async () => { const r = await BA.syncBans(); $('testResult').textContent = (r && r.newly != null) ? I18N.t('dev.banCheckDoneN', { n: r.newly }) : I18N.t('dev.banCheckDone'); });
-  on('btnTestRecord', 'click', async () => {
-    $('testResult').textContent = I18N.t('dev.recTestStart');
-    const r = await BA.testRecord();
-    if (!r || !r.ok) { $('testResult').textContent = I18N.t('dev.recTestFail', { msg: (r && r.message) || I18N.t('dev.unknown') }); return; }
-  });
 
   // 卡组工具
   on('btnDeckRefresh', 'click', refreshDecks);
@@ -2072,11 +1955,10 @@ function bindUI() {
 // ---------- 首页面板次序 ----------
 const PANELS = [
   { key: 'current', id: 'currentCard', label: () => I18N.t('card.current') },
-  { key: 'deck', id: 'deckCard', label: () => I18N.t('card.deck') },
   { key: 'maggot', id: 'maggotCard', label: () => I18N.t('card.maggot') },
-  { key: 'ban', id: 'banCard', label: () => I18N.t('card.ban') },
   { key: 'archive', id: 'archiveSplit', label: () => I18N.t('card.archive') + ' / ' + I18N.t('card.replay') },
-  { key: 'about', id: 'aboutCard', label: () => I18N.t('card.about') }
+  { key: 'deck', id: 'deckCard', label: () => I18N.t('card.deck') },
+  { key: 'ban', id: 'banCard', label: () => I18N.t('card.ban') }
 ];
 const PANEL_KEYS = PANELS.map((p) => p.key);
 let panelOrder = []; // 当前生效顺序（空 = 默认 DOM 顺序）
@@ -2134,7 +2016,6 @@ async function saveSettings() {
   await BA.setConfig({
     logDir: dir,
     autoQueryCurrentMatch: $('setAuto').checked,
-    inputHookEnabled: $('setInputHook').checked,
     banPollEnabled: $('setBanPoll').checked,
     matchSyncEnabled: $('setMatchSync').checked,
     banCardVisible: $('setBanCard').checked,
@@ -2143,7 +2024,6 @@ async function saveSettings() {
     panelOrder: normPanelOrder(panelOrder.length ? panelOrder : PANEL_KEYS)
   });
   savedTheme = currentTheme;
-  setApmVisible($('setInputHook').checked);
   setBanCardVisible($('setBanCard').checked);
   applyTheme(currentTheme);
   $('settingsModal').classList.add('hidden');
@@ -2152,44 +2032,13 @@ async function saveSettings() {
 }
 
 // ---------- 主流程 ----------
-// 语言切换：静态 data-i18n 由 I18N.setLang 处理；这里重渲染依赖 JS 的核心动态文案
-function applyLangUI() {
-  if (archiveList && archiveList.length) renderArchive(archiveList);
-  renderReplayList();
-  if (lastVersionInfo) renderVersion(lastVersionInfo);
-  if (currentCfg) renderReplayNote(currentCfg);
-  const st = $('statusText');
-  if (st && st.dataset.i18n) st.textContent = I18N.t(st.dataset.i18n);
-}
-
-// 页眉四语言按钮（中文 / English / 日本語 / Русский）
-function bindLangButtons() {
-  const pairs = [['langEn', 'en'], ['langZh', 'zh'], ['langJa', 'ja'], ['langRu', 'ru']];
-  const cur = I18N.lang || 'zh';
-  for (const [id, lg] of pairs) {
-    const b = document.getElementById(id);
-    if (!b) continue;
-    b.classList.toggle('active', cur === lg);
-    b.addEventListener('click', async () => {
-      I18N.setLang(lg);
-      for (const [id2, lg2] of pairs) {
-        const bb = document.getElementById(id2);
-        if (bb) bb.classList.toggle('active', lg === lg2);
-      }
-      try { await BA.setConfig({ lang: lg }); } catch (e) {}
-    });
-  }
-}
-
 async function init() {
   const cfg = await BA.getConfig();
   savedTheme = cfg.theme || 'dark';
   applyTheme(savedTheme);
   currentCfg = cfg;
-  I18N.setLang(cfg.lang || 'zh');
-  bindLangButtons();
-  I18N.onChange(applyLangUI);
-  setApmVisible(!!cfg.inputHookEnabled);
+  I18N.setLang('zh'); // 界面只保留中文
+  setDeckCollapsed(cfg.deckCollapsed !== false); // 卡组工具默认折叠
   setBanCardVisible(!!cfg.banCardVisible);
   applyPanelOrder(cfg.panelOrder);
   const repSw = $('setReplayEnabled'); if (repSw) repSw.checked = !!cfg.replayEnabled;
@@ -2251,12 +2100,6 @@ async function init() {
   BA.onMatchesChanged((d) => renderArchive(d && d.list));
   BA.onDeckChanged(() => refreshDecks());
   BA.onDeckSyncAlert(renderDeckSyncAlert);
-  BA.onApmStart(renderApmStart);
-  BA.onApmLive(renderApmLive);
-  BA.onApmResult(renderApmResult);
-  BA.onApmIdle(renderApmIdle);
-  BA.onBudget(renderBudget);
-  BA.getUsage().then(renderBudget).catch(() => {});
   // BATrace 人机验证横幅：弹出验证窗口/完成/取消时提示
   if (BA.onBatraceGate) BA.onBatraceGate((state) => {
     const b = $('batraceGateBanner');
@@ -2280,13 +2123,6 @@ async function init() {
   BA.getBans().then(renderBans).catch(() => {});
   BA.onBansChanged((d) => { if (banView === 'met') { banView = 'all'; const btn = $('btnBanCheaters'); if (btn) btn.textContent = I18N.t('ban.cheatersBtn'); } renderBans(d && d.list); });
   BA.onBanAlert(renderBanAlert);
-  BA.onTestResult((d) => {
-    if (!d) return;
-    const el = $('testResult');
-    if (!el) return;
-    if (d.ok) { el.textContent = I18N.t('status.recTestDone', { file: d.file, size: fmtSize(d.size) }); refreshLocalReplayList(); renderReplayList(); }
-    else { el.textContent = I18N.t('status.recTestFailed', { msg: d.error || I18N.t('common.unknown') }); }
-  });
   BA.onReplayRecording((d) => {
     replayRecordingActive = !!(d && d.active && !d.error);
     if (d && d.error) { const el = $('replayStatus'); if (el) { el.textContent = I18N.t('replay.recError', { msg: d.error }); el.title = I18N.t('replay.recErrorDetail'); } setReplayPreview(false); return; }

@@ -7,32 +7,6 @@ const path = require('path');
 
 const BASE = 'https://app.batrace.top';
 
-// 24 小时滚动 API 配额（持久化到磁盘，重启不丢）
-class ApiUsage {
-  constructor(file, limit = 120) {
-    this.file = file;
-    this.limit = limit;
-    this.calls = [];
-    try {
-      if (fs.existsSync(file)) {
-        const arr = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (Array.isArray(arr)) this.calls = arr.filter((t) => typeof t === 'number');
-      }
-    } catch (e) { this.calls = []; }
-    this.prune();
-  }
-  prune() {
-    const cut = Date.now() - 24 * 3600 * 1000;
-    if (this.calls.some((t) => t <= cut)) {
-      this.calls = this.calls.filter((t) => t > cut);
-      this.save();
-    }
-  }
-  count() { this.prune(); return this.calls.length; }
-  left() { if (this.limit <= 0) return Infinity; return Math.max(0, this.limit - this.count()); }
-  record() { this.prune(); this.calls.push(Date.now()); this.save(); }
-  save() { try { fs.writeFileSync(this.file, JSON.stringify(this.calls), 'utf8'); } catch (e) {} }
-}
 // 注意：不发送自定义 User-Agent。腾讯 EdgeOne 会把「自定义 UA」判为机器人并返回验证页（实测锁定），
 // 让 Chromium net.fetch 使用默认 UA 才能通过人机验证。
 
@@ -73,8 +47,6 @@ class BatraceClient {
     this.base = opts.base || BASE;
     this.delayMs = opts.delayMs || 350;
     this.cache = opts.cache || null; // Cache 实例
-    this.usage = opts.usage || null; // ApiUsage 实例（24h 配额）
-    this.onUsage = typeof opts.onUsage === 'function' ? opts.onUsage : null; // 每次真实请求后的回调（用于实时刷新用量）
     this.extraHeaders = (opts.extraHeaders && typeof opts.extraHeaders === 'object') ? opts.extraHeaders : {}; // 自定义请求头（本地私有，如 bypass 白名单头）
     this.fetchImpl = typeof opts.fetchImpl === 'function' ? opts.fetchImpl : null; // 自定义请求实现（Electron net.fetch，与验证窗口共享 session cookie）
     this.onChallenge = typeof opts.onChallenge === 'function' ? opts.onChallenge : null; // BATrace 人机验证解锁回调（检测到验证页时触发）
@@ -88,19 +60,14 @@ class BatraceClient {
     return next;
   }
 
-  async _get(p, { ttl, cacheKey, retries = 2, countUsage = true } = {}) {
+  async _get(p, { ttl, cacheKey, retries = 2 } = {}) {
     const key = cacheKey || p;
     if (ttl && this.cache) {
       const hit = this.cache.get(key, ttl);
       if (hit) return hit;
     }
-    // 24h 配额检查：命中缓存不算调用，但真正请求要先过配额；后台轻量同步接口（封禁/本机对局）不计配额
-    if (this.usage && countUsage && this.usage.left() <= 0) {
-      throw new Error('API 配额已用尽（24 小时内最多 ' + this.usage.limit + ' 次），请明天再试');
-    }
     const fetchImpl = this.fetchImpl || ((u, o) => fetch(u, o));
     this.networkCalls = (this.networkCalls || 0) + 1; // 真正打到 batrace 的请求数（缓存命中不计）
-    if (this.onUsage) this.onUsage(); // 实时通知用量变化（配额/次数）
     await this._throttle();
     let lastErr = null;
     let challengeTried = false; // 本次调用是否已触发过人机验证
@@ -126,7 +93,6 @@ class BatraceClient {
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        if (this.usage && countUsage) this.usage.record(); // 真实 API 成功响应才计 24h 配额
         if (ttl && this.cache) this.cache.set(key, json);
         return json;
       } catch (e) {
@@ -223,10 +189,6 @@ class BatraceClient {
     return isCaptchaHtml(text);
   }
 
-  usageLeft() {
-    return this.usage ? this.usage.left() : null;
-  }
-
   units() {
     return this._get('/api/units', {
       ttl: 7 * 24 * 3600 * 1000, cacheKey: 'units'
@@ -234,5 +196,5 @@ class BatraceClient {
   }
 }
 
-module.exports = { BatraceClient, Cache, ApiUsage, isCaptchaHtml };
+module.exports = { BatraceClient, Cache, isCaptchaHtml };
 

@@ -13,16 +13,12 @@ const DEFAULTS = {
   batraceExtraHeaders: {}, // 本地私有：BATrace 自定义请求头（如 Eero 给的 bypass 白名单头）。默认空、不写死、不进设置界面
   // 是否在检测到对局后自动查询所有玩家
   autoQueryCurrentMatch: true,
-  // 真实输入统计（全局鼠标+键盘钩子，默认关闭，反作弊风险自担）
-  inputHookEnabled: false,
-  // 24 小时 API 调用配额上限（超过后当天不再请求）
-  apiDailyLimit: 400,
   // 界面主题：dark / light / cyan / orange
   theme: 'dark',
-  // 界面语言：zh / en / ja / ru（核心界面四语）
-  lang: 'zh',
-  // 首页面板次序：['current','deck','maggot','ban','archive','about']；空数组 = 默认 DOM 顺序
+  // 首页面板次序：['current','maggot','archive','deck','ban']；空数组 = 默认顺序
   panelOrder: [],
+  // 卡组工具默认折叠
+  deckCollapsed: true,
   // 封禁监控：每小时检查封禁名单并提醒新增
   banPollEnabled: true,
   // 每小时同步本机最近对局（用于玩家追踪回填）
@@ -53,6 +49,9 @@ const DEFAULTS = {
     units: 7 * 24 * 3600 * 1000 // 单位库 7 天
   }
 };
+
+// 已移除的设置项（旧配置里有的话清掉）：API 配额、APM 输入钩子、界面语言、心跳
+const OBSOLETE = ['apiDailyLimit', 'inputHookEnabled', 'lang', 'heartbeatUrl', 'heartbeatEnabled'];
 
 // 常见默认 Steam 安装路径（用于“自动检测”）
 const COMMON_STEAM_ROOTS = [
@@ -134,7 +133,9 @@ class Config {
       if (fs.existsSync(this.file)) {
         const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
         this.data = { ...DEFAULTS, ...raw, cacheTtl: { ...DEFAULTS.cacheTtl, ...(raw.cacheTtl || {}) } };
-        this.data.apiDailyLimit = DEFAULTS.apiDailyLimit; // 24h 配额为固定值，不随旧配置残留
+        for (const k of OBSOLETE) delete this.data[k];
+        // 旧版面板次序里有「关于」（已移到设置底部）：重置成新的默认布局
+        if (Array.isArray(this.data.panelOrder) && this.data.panelOrder.includes('about')) this.data.panelOrder = [];
         // 录像参数归一化：非法值回落默认（防旧配置/手改损坏）
         this.data.replayQuality = normReplayQuality(this.data.replayQuality);
         this.data.replayFps = normReplayFps(this.data.replayFps);
@@ -164,11 +165,9 @@ class Config {
 
   set(patch) {
     this.data = { ...this.data, ...patch };
-    this.data.apiDailyLimit = DEFAULTS.apiDailyLimit; // 固定配额
     this.data.pollMs = DEFAULTS.pollMs;
     this.data.apiDelayMs = DEFAULTS.apiDelayMs;
-    delete this.data.heartbeatUrl;
-    delete this.data.heartbeatEnabled;
+    for (const k of OBSOLETE) delete this.data[k];
     this.data.replayQuality = normReplayQuality(this.data.replayQuality);
     this.data.replayFps = normReplayFps(this.data.replayFps);
     this.data.replayBitrateMbps = normReplayBitrate(this.data.replayBitrateMbps);

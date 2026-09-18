@@ -222,7 +222,7 @@ app.whenReady().then(async () => {
         out.hasReplayAudioBadge = !!document.getElementById('replayPreviewAudio');
         out.hasReplayOpenFolderBtn = !!document.getElementById('btnReplayOpenFolder');
         out.hasReplayClean30Btn = !!document.getElementById('btnReplayClean30');
-        out.apmLabel = ((document.getElementById('settingsModal') || {}).textContent || '').indexOf('APM 监测功能') >= 0;
+        out.noApm = !document.getElementById('apmCard') && ((document.getElementById('settingsModal') || {}).textContent || '').indexOf('APM') < 0;
         const settingsEl = document.getElementById('settingsModal');
         out.settingsNoReplaySwitch = !settingsEl || (settingsEl.querySelectorAll('#setReplayEnabled').length === 0);
         out.settingsNoLocalList = !document.getElementById('localReplayList');
@@ -282,7 +282,7 @@ app.whenReady().then(async () => {
         out.hasRoomToolApi = typeof window.api.onRoomToolUsers === 'function';
         out.noReplayConfirmModal = !document.getElementById('replayConfirmModal') && !document.getElementById('btnReplayConfirmUpload');
         out.noConfirmApi = typeof window.api.confirmUpload !== 'function' && typeof window.api.onConfirmUpload !== 'function';
-        out.hasTestRecord = !!document.getElementById('btnTestRecord') && typeof window.api.testRecord === 'function';
+        out.noTestRecord = !document.getElementById('btnTestRecord') && typeof window.api.testRecord !== 'function';
         out.hasNewReplayApi = typeof window.api.selectReplaySaveDir === 'function' && typeof window.api.setReplaySaveDir === 'function' && typeof window.api.moveReplays === 'function' && typeof window.api.getScreenThumbnail === 'function';
         // 查龙区分：点击后按钮禁用 → 完成恢复并渲染面板（分数、分档、龙/区/泯标记、原因）
         lastReport = { id: '8863', name: 'Zola' }; // app.js 全局变量，模拟已选玩家
@@ -304,9 +304,8 @@ app.whenReady().then(async () => {
         // 顶栏心跳无「经代理」文案
         out.noProxyTextInHeartbeat = !((document.getElementById('onlineText') || {}).title || '').includes('经代理');
         out.displayPicker = !!document.getElementById('displayPickerModal') && !!document.getElementById('displayThumbs') && typeof window.api.listDisplays === 'function';
-        // 四语言：按钮齐全；默认中文激活；录像行右键菜单；切英文后标题变英文；档案行「已重开」徽标
-        out.langButtons = ['langEn', 'langZh', 'langJa', 'langRu'].every((id) => !!document.getElementById(id));
-        out.langZhActive = ((document.getElementById('langZh') || {}).classList || []).contains('active');
+        // 只保留中文；录像行右键菜单；档案行「已重开」徽标
+        out.noLangButtons = !document.getElementById('langEn') && !document.querySelector('.lang-switch');
         out.archiveHasRestarted = ((document.getElementById('archiveList') || {}).textContent || '').indexOf('已重开') >= 0;
         const rr = document.querySelector('#replayList .replay-row[data-key]');
         if (rr) rr.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 80, clientY: 80 }));
@@ -314,20 +313,12 @@ app.whenReady().then(async () => {
         out.replayCtxText = (document.getElementById('ctxMenu') || {}).textContent || '';
         out.replayCtxHasOpenDetail = out.replayCtxText.indexOf('打开对局详情') >= 0 && out.replayCtxText.indexOf('打开位置') >= 0 && out.replayCtxText.indexOf('删除录像') >= 0;
         document.dispatchEvent(new MouseEvent('click'));
-        document.getElementById('langEn').click();
-        await new Promise((r) => setTimeout(r, 250));
-        out.archiveTitleEn = (document.querySelector('h2[data-i18n="card.archive"]') || {}).textContent || '';
-        out.archiveTitleIsEn = /Match archive/.test(out.archiveTitleEn);
-        out.langHtmlLang = document.documentElement.lang;
-        // 语言保存修复：切英文后 config.lang 应写入 settings（preload 只暴露 setConfig）
-        out.langSavedEn = (await window.api.getConfig().catch(() => ({}))).lang === 'en';
-        // 英文下：标题 / 品牌 / 关于段落
-        out.titleEn = document.title;
-        out.titleIsEn = /Broken Arrow Log Assistant/.test(out.titleEn);
-        out.brandEn = ((document.querySelector('.brand-name') || {}).textContent || '').trim();
-        out.brandIsEn = /Broken Arrow Log Assistant/.test(out.brandEn);
-        out.aboutEn = ((document.getElementById('aboutCard') || {}).textContent || '');
-        out.aboutIsEn = /How it works/.test(out.aboutEn) && /Credits/.test(out.aboutEn);
+        // 改名、去掉 API 额度和「关于」卡片、卡组默认折叠、首页顺序
+        out.titleCn = document.title === '龙区分类器' && ((document.querySelector('.brand-name') || {}).textContent || '').trim() === '龙区分类器';
+        out.noBudget = !document.getElementById('budgetText') && typeof window.api.getUsage !== 'function';
+        out.noAboutCard = !document.getElementById('aboutCard') && !!document.querySelector('.settings-about');
+        out.deckCollapsedDefault = (document.getElementById('deckCard') || {}).classList.contains('collapsed');
+        out.panelOrderDom = [...document.querySelectorAll('main > section.card:not(.hidden), main > .split')].map((e) => e.id).join(',');
         // 两栏底部留白修复：.archive-list 无 max-height、.split > .card 有 max-height
         const al = document.getElementById('archiveList');
         const alCs = al ? getComputedStyle(al) : null;
@@ -343,8 +334,6 @@ app.whenReady().then(async () => {
         out.splitGapBottom = cardBox && listBox ? Math.round(cardBox.bottom - listBox.bottom) : -1;
         out.splitNoGap = cardBox && listBox ? (cardBox.bottom - listBox.bottom) <= 40 : false;
         out.langHtmlLang = document.documentElement.lang;
-        document.getElementById('langZh').click();
-        await new Promise((r) => setTimeout(r, 150));
       }
       return out;
       })()`),

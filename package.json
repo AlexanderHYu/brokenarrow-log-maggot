@@ -1,7 +1,7 @@
 {
   "name": "broken-arrow-log-assistant",
-  "version": "3.5.6",
-  "description": "断箭蛆工具 byZola - 基于 GameLogs 日志监听与 BATrace 数据查询的本地辅助工具",
+  "version": "4.0.0",
+  "description": "龙区分类器 - 基于断箭 GameLogs 日志与 BATrace 数据的对局复盘工具",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -17,9 +17,9 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.zola.brokenarrow.maggot",
+    "appId": "com.alexanderhyu.dragonclassifier",
     "npmRebuild": false,
-    "productName": "断箭蛆工具 byZola",
+    "productName": "龙区分类器",
     "directories": {
       "output": "dist"
     },
@@ -53,7 +53,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "断箭蛆工具 byZola"
+      "shortcutName": "龙区分类器"
     },
     "extraResources": [
       {
@@ -65,8 +65,5 @@
         ]
       }
     ]
-  },
-  "dependencies": {
-    "uiohook-napi": "^1.5.5"
   }
 }

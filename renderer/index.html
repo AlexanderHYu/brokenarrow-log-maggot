@@ -3,30 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; media-src 'self' blob: data: replay:; connect-src 'self'" />
-  <title data-i18n="app.title">断箭蛆工具 byZola</title>
+  <title>龙区分类器</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header id="topbar">
     <div class="brand">
-      <span class="logo">🐛</span>
-      <span class="brand-name"><span data-i18n="app.brand">断箭蛆工具</span><em> byZola</em></span>
+      <img class="logo" src="logo.png" alt="" />
+      <span class="brand-name">龙区分类器</span>
       <span id="ver" class="ver"></span>
     </div>
     <div class="status" id="statusBar">
       <span id="listenDot" class="dot off"></span>
       <span id="statusText" data-i18n="status.notListening">未监听</span>
       <span id="fileText" class="dim"></span>
-      <span id="budgetText" class="dim" data-i18n-title="budget.title"></span>
       <span id="apiHealth" class="api-health" data-i18n-title="api.checking">BATrace ●</span>
     </div>
     <div class="actions">
-      <div class="lang-switch">
-        <button id="langEn" class="btn btn-ghost lang-btn" title="English">EN</button>
-        <button id="langZh" class="btn btn-ghost lang-btn" title="中文">中文</button>
-        <button id="langJa" class="btn btn-ghost lang-btn" title="日本語">日本語</button>
-        <button id="langRu" class="btn btn-ghost lang-btn" title="Русский">РУС</button>
-      </div>
       <button id="btnGame" class="btn btn-ghost" data-i18n="header.game" data-i18n-title="header.gameTitle">🎮 小游戏</button>
       <button id="btnSettings" class="btn btn-primary" data-i18n="header.settings">⚙ 设置</button>
     </div>
@@ -42,34 +35,84 @@
     <section class="card" id="currentCard">
       <div class="card-head">
         <h2>📍 <span id="currentCardTitle" data-i18n="card.current">当前房间 / 当前对局</span></h2>
-        <span id="matchMeta" class="dim" data-i18n="match.waitingLog">等待日志…</span>
+        <div class="head-right">
+          <span id="matchMeta" class="dim" data-i18n="match.waitingLog">等待日志…</span>
+          <button id="btnPrevMatch" class="btn btn-ghost" data-i18n="btn.prevMatch" data-i18n-title="btn.prevMatchTitle">🕘 上一局</button>
+          <button id="btnReQuery" class="btn btn-ghost" data-i18n="btn.requery" data-i18n-title="btn.requeryTitle">🔄 刷新粗查</button>
+        </div>
       </div>
       <div id="matchInfo" class="match-info"></div>
       <div id="teamGrid" class="team-grid"></div>
       <div class="query-row">
         <div id="queryStatus" class="query-status dim"></div>
-        <button id="btnPrevMatch" class="btn btn-ghost" data-i18n="btn.prevMatch" data-i18n-title="btn.prevMatchTitle">🕘 上一局</button>
-        <button id="btnReQuery" class="btn btn-ghost" data-i18n="btn.requery" data-i18n-title="btn.requeryTitle">🔄 刷新粗查</button>
+        <span class="delay-note dim" data-i18n="common.delayNote">⚠️ 粗查结果来自 BATrace 历史数据，存在数天延迟，并非实时对战数据。</span>
       </div>
-      <div class="delay-note dim" data-i18n="common.delayNote">⚠️ 粗查结果来自 BATrace 历史数据，存在数天延迟，并非实时对战数据。</div>
     </section>
 
-    <!-- APM 统计（默认收起，设置里开启后展开） -->
-    <section class="card hidden" id="apmCard">
+    <!-- 玩家查询 · 龙区分 -->
+    <section class="card" id="maggotCard">
       <div class="card-head">
-        <h2 data-i18n="card.apm">⚡ APM 统计（真实鼠标 + 键盘）</h2>
-        <div class="head-right">
-          <span id="apmMeta" class="dim" data-i18n="apm.waiting">等待对局…</span>
-          <button id="btnApmToggle" class="btn btn-ghost card-toggle" data-i18n-title="apm.toggle">▾</button>
-        </div>
+        <h2 data-i18n="card.maggot">🔍 玩家查询 · 龙区分</h2>
       </div>
-      <div id="apmBody" class="apm-body">
-        <div class="apm-empty dim" data-i18n="apm.idleHint">对局开始后自动统计：仅记录游戏窗口在前台时的鼠标点击与键盘按键（全局只读钩子，不模拟、不拦截任何输入）。默认关闭，需在「设置」中开启「APM 监测功能」。对局结束自动生成每分钟操作图。</div>
+      <div class="search-row">
+        <input id="searchInput" type="text" data-i18n-placeholder="search.ph" placeholder="输入玩家名或 ID，回车搜索" />
+        <button id="btnSearch" class="btn" data-i18n="btn.search">搜索</button>
+        <button id="btnDragon" class="btn btn-accent" data-i18n="btn.dragon">🐉 查龙区分</button>
       </div>
+      <div class="hint dim" data-i18n="dragon.hint">搜索 → 点结果看粗查预览 → 点「查龙区分」看这个人最近 20 场排位的龙区分。</div>
+      <div id="searchResults" class="search-results"></div>
+      <div id="reportArea"></div>
+      <div id="dragonArea"></div>
     </section>
 
-    <!-- 卡组工具：两列同栏 -->
-    <section class="card" id="deckCard">
+    <!-- 对局档案 + 行车记录仪（两栏布局） -->
+    <div class="split" id="archiveSplit">
+      <section class="card" id="archiveCard">
+        <div class="card-head">
+          <h2 data-i18n="card.archive">🗂 对局档案</h2>
+        </div>
+        <div class="search-row archive-add">
+          <input id="addMatchFid" type="text" data-i18n-placeholder="archive.addPh" placeholder="手动收录对局 ID" />
+          <button id="btnAddMatch" class="btn btn-ghost" data-i18n="archive.add">收录</button>
+        </div>
+        <div id="archiveList" class="archive-list"></div>
+      </section>
+
+      <!-- 行车记录仪（屏幕截屏合成 WebM 本地保存；卡片常驻，开关只控制自动录制；列表按时间倒序管理） -->
+      <section class="card" id="replayCard">
+        <div class="card-head">
+          <h2 data-i18n="card.replay">🚗 行车记录仪</h2>
+          <div class="head-right">
+            <span id="replayStatus" class="dim"></span>
+            <span class="dim" style="font-size:12px" data-i18n="replay.auto">自动录制</span>
+            <label class="switch"><input id="setReplayEnabled" type="checkbox" checked /><span class="slider"></span></label>
+            <button id="btnRecSettings" class="btn btn-ghost" data-i18n="replay.settings" data-i18n-title="replay.settingsTitle">⚙ 录像设置</button>
+          </div>
+        </div>
+        <div id="replayPreviewWrap" class="replay-preview hidden">
+          <div class="replay-preview-head">
+            <span id="replayPreviewLabel" class="dim" data-i18n="replay.recording">🔴 正在录制</span>
+            <span id="replayPreviewAudio" class="dim"></span>
+            <span class="dim" style="margin-left:auto;font-size:11px" data-i18n="replay.previewHint">每秒刷新 · 录制时显示</span>
+          </div>
+          <img id="replayPreviewImg" data-i18n-alt="replay.previewAlt" alt="录制预览" />
+        </div>
+        <div class="replay-note dim" id="replayNote"></div>
+        <div id="replayStorageWarn" class="replay-warn hidden"></div>
+        <div class="replay-list-wrap">
+          <div class="replay-list-head">
+            <span id="replayListInfo" class="dim"></span>
+            <span style="flex:1"></span>
+            <button type="button" id="btnReplayOpenFolder" class="btn btn-ghost" data-i18n="replay.openFolder">📂 打开位置</button>
+            <button type="button" id="btnReplayClean30" class="btn btn-ghost" data-i18n="replay.clean30">删除 30 天前</button>
+          </div>
+          <div id="replayList" class="replay-list"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 卡组工具（默认折叠，点标题栏展开） -->
+    <section class="card collapsed" id="deckCard">
       <div class="card-head">
         <h2 data-i18n="card.deck">🃏 卡组工具（断箭的卡组）</h2>
         <div class="head-right">
@@ -120,23 +163,6 @@
       <div id="deckMsg" class="deck-msg dim"></div>
     </section>
 
-    <!-- 玩家查询：搜索 → 粗查预览 → 龙区分 -->
-    <section class="card" id="maggotCard">
-      <div class="card-head">
-        <h2 data-i18n="card.maggot">🔍 玩家查询 · 龙区分</h2>
-        <span id="dragonCalls" class="dim"></span>
-      </div>
-      <div class="search-row">
-        <input id="searchInput" type="text" data-i18n-placeholder="search.ph" placeholder="输入玩家名或 ID，回车搜索" />
-        <button id="btnSearch" class="btn" data-i18n="btn.search">搜索</button>
-        <button id="btnDragon" class="btn btn-accent" data-i18n="btn.dragon">🐉 查龙区分</button>
-      </div>
-      <div class="hint dim" data-i18n="dragon.hint">搜索 → 点结果看粗查预览 → 点「查龙区分」看龙区分：越高越像龙，越低越像区（1 次调用，1 小时缓存）。</div>
-      <div id="searchResults" class="search-results"></div>
-      <div id="reportArea"></div>
-      <div id="dragonArea"></div>
-    </section>
-
     <!-- 封禁追踪 -->
     <section class="card hidden" id="banCard">
       <div class="card-head">
@@ -149,65 +175,6 @@
       <div id="banList" class="ban-list"></div>
     </section>
 
-    <!-- 对局档案 + 行车记录仪（两栏布局） -->
-    <div class="split" id="archiveSplit">
-      <section class="card" id="archiveCard">
-        <div class="card-head">
-          <h2 data-i18n="card.archive">🗂 对局档案</h2>
-        </div>
-        <div class="search-row archive-add">
-          <input id="addMatchFid" type="text" data-i18n-placeholder="archive.addPh" placeholder="手动收录对局 ID" />
-          <button id="btnAddMatch" class="btn btn-ghost" data-i18n="archive.add">收录</button>
-        </div>
-        <div id="archiveList" class="archive-list"></div>
-      </section>
-
-      <!-- 行车记录仪（屏幕截屏合成 WebM 本地保存；卡片常驻，开关只控制自动录制；列表按时间倒序管理） -->
-      <section class="card" id="replayCard">
-        <div class="card-head">
-          <h2 data-i18n="card.replay">🚗 行车记录仪</h2>
-          <div class="head-right">
-            <span id="replayStatus" class="dim"></span>
-            <span class="dim" style="font-size:12px" data-i18n="replay.auto">自动录制</span>
-            <label class="switch"><input id="setReplayEnabled" type="checkbox" checked /><span class="slider"></span></label>
-            <button id="btnRecSettings" class="btn btn-ghost" data-i18n="replay.settings" data-i18n-title="replay.settingsTitle">⚙ 录像设置</button>
-          </div>
-        </div>
-        <div id="replayPreviewWrap" class="replay-preview hidden">
-          <div class="replay-preview-head">
-            <span id="replayPreviewLabel" class="dim" data-i18n="replay.recording">🔴 正在录制</span>
-            <span id="replayPreviewAudio" class="dim"></span>
-            <span class="dim" style="margin-left:auto;font-size:11px" data-i18n="replay.previewHint">每秒刷新 · 录制时显示</span>
-          </div>
-          <img id="replayPreviewImg" data-i18n-alt="replay.previewAlt" alt="录制预览" />
-        </div>
-        <div class="replay-note dim" id="replayNote"></div>
-        <div id="replayStorageWarn" class="replay-warn hidden"></div>
-        <div class="replay-list-wrap">
-          <div class="replay-list-head">
-            <span id="replayListInfo" class="dim"></span>
-            <span style="flex:1"></span>
-            <button type="button" id="btnReplayOpenFolder" class="btn btn-ghost" data-i18n="replay.openFolder">📂 打开位置</button>
-            <button type="button" id="btnReplayClean30" class="btn btn-ghost" data-i18n="replay.clean30">删除 30 天前</button>
-          </div>
-          <div id="replayList" class="replay-list"></div>
-        </div>
-      </section>
-    </div>
-
-    <!-- 关于（整宽单栏，置于最下方） -->
-    <section class="card" id="aboutCard">
-      <div class="card-head">
-        <h2 data-i18n="card.about">ℹ️ 关于</h2>
-        <span id="aboutVer" class="dim"></span>
-      </div>
-      <div class="about-body">
-        <p><b data-i18n="about.principlesTitle">软件原理</b><span data-i18n="about.principlesBody">：本工具只读取游戏官方公开的日志文件（GameLogs）与查询网站的公开接口，不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊，仅作赛后复盘参考。</span></p>
-        <p><b data-i18n="about.creditsTitle">数据致谢</b><span data-i18n="about.creditsPre">：玩家数据由 </span><a id="linkBatrace" href="#" class="link" data-i18n="about.linkBatrace">BATrace 查询站</a><span data-i18n="about.creditsMid"> 提供；蛆指数算法与 </span><a id="linkMaggotSite" href="#" class="link" data-i18n="about.linkMaggotSite">断箭蛆指数网站</a><span data-i18n="about.creditsPost"> 保持同步。</span></p>
-        <p><b data-i18n="about.ffmpegTitle">录像组件</b><span data-i18n="about.ffmpegBody">：录像使用 FFmpeg（GPL 协议）编码，源码与构建脚本见 </span><a id="linkFfmpeg" href="#" class="link">FFmpeg-Builds</a></p>
-        <div id="updateInfo" class="update-info"></div>
-      </div>
-    </section>
   </main>
 
   <!-- 确认弹窗 -->
@@ -235,7 +202,6 @@
         <span id="dirHint" class="dim"></span>
       </div>
       <label class="check"><input id="setAuto" type="checkbox" /> <span data-i18n="settings.autoQuery">检测到对局后自动粗查玩家</span></label>
-      <label class="check"><input id="setInputHook" type="checkbox" /> <span data-i18n="settings.apm">APM 监测功能（全局鼠标+键盘钩子，只读不拦截；默认关闭，开启前请自行评估反作弊风险）</span></label>
       <label data-i18n="settings.theme">主题</label>
       <div class="theme-picker" id="themePicker">
         <button type="button" class="theme-swatch" data-theme="dark" data-i18n-title="theme.darkTitle"><i style="background:#0d1017"></i><span data-i18n="theme.dark">黑</span></button>
@@ -268,15 +234,9 @@
         <div class="test-title dim" data-i18n="settings.accountsTitle">👥 账号数据管理（删除会同时清理该账号的对局/相遇数据与卡组归档文件夹）</div>
         <div id="accountList" class="inv-list"></div>
       </div>
-      <div class="test-block">
-        <div class="test-title dim" data-i18n="settings.devTitle">🧪 开发者测试（不影响正常功能）</div>
-        <div class="search-row" style="flex-wrap:wrap">
-          <button type="button" id="btnTestBanNotify" class="btn btn-ghost" data-i18n="settings.devBanNotify">测试封禁提醒（遇到过）</button>
-          <button type="button" id="btnTestMatchSync" class="btn btn-ghost" data-i18n="settings.devSyncNow">立即同步我的对局</button>
-          <button type="button" id="btnTestBanSync" class="btn btn-ghost" data-i18n="settings.devBanCheck">立即检查封禁</button>
-          <button type="button" id="btnTestRecord" class="btn btn-ghost" data-i18n="settings.devRecord">🎥 录制测试（1 分钟·只存本地）</button>
-        </div>
-        <div id="testResult" class="dim"></div>
+      <div class="settings-about dim">
+        <p>🐉 龙区分类器 <span id="aboutVer"></span> · 只读取游戏日志（GameLogs）与 BATrace 公开接口，不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊。</p>
+        <p>玩家数据：<a id="linkBatrace" href="#" class="link">BATrace</a> · 最初的蛆指数来自 <a id="linkMaggotSite" href="#" class="link">断箭蛆指数网站</a> · 录像编码：FFmpeg（GPL，源码见 <a id="linkFfmpeg" href="#" class="link">FFmpeg-Builds</a>）</p>
       </div>
       <div class="modal-actions">
         <button id="btnSave" class="btn btn-primary" data-i18n="common.save">保存</button>

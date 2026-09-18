@@ -7,11 +7,9 @@ const os = require('os');
 const { Config, detectSteamLogDir } = require('./src/config');
 const { LogParser } = require('./src/logParser');
 const { LogWatcher } = require('./src/logWatcher');
-const { BatraceClient, Cache, ApiUsage } = require('./src/batrace');
+const { BatraceClient, Cache } = require('./src/batrace');
 const { ensureBatraceAccess, closeBatraceGate } = require('./src/batraceGate');
 const { ApiHealth } = require('./src/apiHealth');
-const { ApmTracker } = require('./src/apm');
-const inputHook = require('./src/inputHook');
 const { createDeckSync, sanitizeAccount } = require('./src/deckSync');
 const { spawn } = require('child_process');
 const { Analyzer, mapName, recentMatchesFromApi } = require('./src/analyzer');
@@ -27,6 +25,8 @@ const { localReplayList, localReplayDelete, localReplayClean, localReplayPath, u
 app.commandLine.appendSwitch('log-level', '4');
 // 录像播放走自定义协议 replay://local/<文件名>：支持 Range 请求，拖进度条只读需要的那一段，大文件也不用整段读进内存
 protocol.registerSchemesAsPrivileged([{ scheme: 'replay', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }]);
+// 数据目录固定为 broken-arrow-log-assistant：显示名改成「龙区分类器」后，旧的设置、缓存、对局档案仍在原处
+app.setPath('userData', path.join(app.getPath('appData'), 'broken-arrow-log-assistant'));
 
 let win = null;
 let config = null;
@@ -35,22 +35,16 @@ let watcher = null;
 let client = null;
 let analyzer = null;
 let archive = null;
-let usage = null;        // 24h API 配额
-let apm = null;          // 对局 APM 统计
-let apmTimer = null;     // APM 实时推送定时器
-let focusWatcher = null; // 游戏窗口前台监视（过滤非游戏输入）
-let inputHookOk = false; // 输入钩子是否可用
 let tracker = null;      // 玩家追踪库
 let banTimer = null;     // 封禁检查定时器
 let matchTimer = null;   // 本机对局同步定时器
 let apiHealth = null;    // API 稳定性健康检查（顶栏三色灯）
 let replayRecorder = null; // 对局录像录制（FFmpeg 采集 + 硬件编码，存 MP4）
-let testRecordTimer = null;   // 录制测试计时器（60 秒自动停）
 
-// 软件图标：优先使用 build/icon.png（由根目录 logo.png 生成），否则用默认
+// 软件图标：打包后用 build/icon.png（由根目录 logo.png 生成）；开发时直接用界面里的 renderer/logo.png
 function appIcon() {
-  const p = path.join(__dirname, 'build', 'icon.png');
-  return fs.existsSync(p) ? p : undefined;
+  for (const p of [path.join(__dirname, 'build', 'icon.png'), path.join(__dirname, 'renderer', 'logo.png')]) if (fs.existsSync(p)) return p;
+  return undefined;
 }
 
 // ---------------- 窗口 ----------------
@@ -61,7 +55,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: '断箭蛆工具 byZola',
+    title: '龙区分类器',
     autoHideMenuBar: true,
     backgroundColor: '#10131a',
     webPreferences: {
@@ -96,13 +90,10 @@ app.whenReady().then(() => {
   config = new Config(app.getPath('userData'));
   parser = new LogParser(onParserEvent);
   watcher = new LogWatcher({ dir: config.get().logDir, pollMs: config.get().pollMs, parser });
-  usage = new ApiUsage(path.join(app.getPath('userData'), 'api-usage.json'), config.get().apiDailyLimit ?? 120);
   client = new BatraceClient({
     delayMs: config.get().apiDelayMs,
     cache: new Cache(path.join(app.getPath('userData'), 'batrace-cache.json')),
-    usage,
     extraHeaders: config.get().batraceExtraHeaders || {},
-    onUsage: () => send('budget', budgetPayload({})),
     // 走 Electron 网络栈：与验证窗口共享同一 session cookie（人机验证 token）
     fetchImpl: (u, o) => net.fetch(u, o),
     // BATrace 新增人机验证（腾讯 EdgeOne）：检测到验证页时自动弹出验证窗口，完成后重试
@@ -113,12 +104,6 @@ app.whenReady().then(() => {
   tracker = new PlayerTracker(path.join(app.getPath('userData'), 'players-db.json'));
   tracker.setMultiAccountBond(!!config.get().multiAccountBond);
   tracker.detectRestarts(); // 历史数据补标"已重开"局
-  apm = new ApmTracker();
-  focusWatcher = new FocusWatcher();
-  inputHook.onEvent(() => {
-    // 只统计“对局进行中 + 游戏窗口在前台”的输入；钩子按需在 matchStart 时启动
-    if (apm && apm.active && focusWatcher.isFocused()) apm.feedInput();
-  });
   apiHealth = new ApiHealth({ file: path.join(app.getPath('userData'), 'api-health.json'), fetchImpl: (u, o) => net.fetch(u, o) });
 
   deckSync = createDeckSync({
@@ -151,7 +136,6 @@ app.whenReady().then(() => {
   watcher.start();
   applyAutoQuery();
   startSyncTimers();
-  send('budget', budgetPayload({}));
   // API 稳定性灯：仅每小时检测一次（不启动即探，避免频繁请求）
   setInterval(() => probeApiHealth(), 3600 * 1000);
 });
@@ -161,18 +145,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// ---------------- APM / 焦点 / 卡组历史辅助 ----------------
-function startApmTimer() {
-  stopApmTimer();
-  apmTimer = setInterval(() => {
-    if (apm && apm.active) send('apm:live', apm.live());
-  }, 5000);
-}
-function stopApmTimer() {
-  if (apmTimer) { clearInterval(apmTimer); apmTimer = null; }
-}
-
-// 判断是否在回放历史日志（回放/历史日志时 APM 无法统计真实输入，直接提示不可用）
+// 判断是否在回放历史日志（回放时不覆盖卡组包、不录像）
 function isReplayLog() {
   try {
     const st = watcher.status();
@@ -183,61 +156,9 @@ function isReplayLog() {
   } catch (e) { return false; }
 }
 
-// 游戏窗口前台监视：常驻一个 PowerShell 进程，每 1s 输出前台窗口进程名
-class FocusWatcher {
-  constructor() {
-    this.child = null;
-    this.focused = false;
-    this.ok = false;
-    this._buf = '';
-  }
-  start() {
-    this.stop();
-    const script = "$s=@'\nusing System;\nusing System.Runtime.InteropServices;\npublic class W { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\"user32.dll\")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p); }\n'@\nAdd-Type $s; while($true){ [uint32]$p=0; $h=[W]::GetForegroundWindow(); [void][W]::GetWindowThreadProcessId($h,[ref]$p); $n=(Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName; if(-not $n){$n=''}; [Console]::Out.WriteLine($n); [Console]::Out.Flush(); Start-Sleep -Milliseconds 1000 }";
-    this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script], { windowsHide: true });
-    this.child.stdout.on('data', (d) => {
-      this._buf += d.toString('utf8');
-      let i;
-      while ((i = this._buf.indexOf('\n')) >= 0) {
-        const name = this._buf.slice(0, i).trim().toLowerCase();
-        this._buf = this._buf.slice(i + 1);
-        this.ok = true;
-        this.focused = /broken.?arrow|broken_arrow/.test(name);
-      }
-    });
-    this.child.on('error', () => { this.ok = false; });
-    this.child.on('exit', () => { this.child = null; });
-  }
-  stop() {
-    if (this.child) { try { this.child.kill(); } catch (e) {} this.child = null; }
-  }
-  isFocused() {
-    // 监视未就绪时宽松放行（避免误杀真实输入）；就绪后严格过滤
-    return this.ok ? this.focused : true;
-  }
-}
-
 // ---------------- 解析器事件 ----------------
 function onParserEvent(type, data) {
   if (type === 'matchStart') {
-    // APM：仅当设置开启 + 输入钩子可用 + 非回放日志时才统计真实输入；
-    // 其余情况直接提示“不可用”，不再降级为日志指令统计。
-    const hookEnabled = !!(config.get().inputHookEnabled);
-    if (!hookEnabled) {
-      send('apm:start', { available: false, reason: 'disabled' });
-    } else if (isReplayLog()) {
-      send('apm:start', { available: false, reason: 'replay' });
-    } else {
-      if (!inputHookOk) inputHookOk = inputHook.start();
-      if (!inputHookOk) {
-        send('apm:start', { available: false, reason: 'hook' });
-      } else {
-        if (apm) apm.start();
-        if (focusWatcher) focusWatcher.start();
-        startApmTimer();
-        send('apm:start', { available: true, map: data.map, fid: data.fid });
-      }
-    }
     // 每局开始：用当前前线卡组覆盖唯一「上一局卡组包」（仅实时日志，回放不覆盖）
     if (!isReplayLog()) {
       try {
@@ -246,7 +167,6 @@ function onParserEvent(type, data) {
       } catch (e) {}
       // 对局录像：设置开启 + 非回放 + 数字 fid 才录
       if (config.get().replayEnabled) {
-        if (testRecordTimer) { clearTimeout(testRecordTimer); testRecordTimer = null; }
         if (replayRecorder.status().active) {
           // 断线重连同一局：继续录制（同一文件，不另起）
           replayLog('matchStart: 断线重连同一局，继续录制（不重启）');
@@ -261,23 +181,6 @@ function onParserEvent(type, data) {
       }
     }
   } else if (type === 'matchEnd') {
-    stopApmTimer();
-    if (focusWatcher) focusWatcher.stop();
-    if (apm && apm.active) {
-      const r = apm.stop();
-      if (r) {
-        r.map = data.map;
-        r.fid = data.fid;
-        r.localDeck = data.localDeck;
-        r.inputHook = true;
-        r.focusFilter = !!(focusWatcher && focusWatcher.ok);
-        send('apm:result', r);
-      } else {
-        send('apm:idle', {});
-      }
-    } else {
-      send('apm:idle', {});
-    }
     archive.add(data);
     tracker.recordLogMatch({ ...data, localName: parser.snapshot().localName, accountKey: parser.snapshot().accountKey });
     tracker.detectRestarts(); // 新局记录后重扫重开局
@@ -330,16 +233,6 @@ function onParserEvent(type, data) {
     send('session', parser.snapshot());
     applyAutoQuery();
   }
-}
-
-function budgetPayload(extra = {}) {
-  return {
-    calls: client ? (client.networkCalls || 0) : 0,
-    used24h: usage ? usage.count() : 0,
-    limit24h: usage ? usage.limit : 120,
-    healthCalls: apiHealth ? apiHealth.healthCalls : 0,
-    ...extra
-  };
 }
 
 let queryToken = 0;
@@ -440,11 +333,9 @@ async function queryCurrentMatch(rosterOverride) {
     }
     done++;
     send('match:player', { ...row, prev: isPrev });
-    send('budget', budgetPayload({ done, total: capped.length, skipped }));
   }
   if (snapshots.length) tracker.savePlayerSnapshots(snapshots); // 批量落盘一次
   send('match:done', { fid, count: capped.length, prev: isPrev });
-  send('budget', budgetPayload({ done: capped.length, total: capped.length, skipped, finished: true }));
 }
 
 
@@ -503,20 +394,6 @@ function cheatersList() {
     out.push({ id: b.id, name: b.name, rating: b.rating, firstSeenAt: b.firstSeenAt, matchCount: ms.length, matches: ms.slice(0, 30) });
   }
   return out;
-}
-
-// 取最近一场对局里的某个非本机玩家（测试封禁提醒模拟用）
-function pickEncounteredPlayer() {
-  if (!tracker) return null;
-  const localIds = tracker.localIds();
-  const matches = Object.values(tracker.data.matches).sort((a, b) => (b.endTime || b.firstSeenAt || 0) - (a.endTime || a.firstSeenAt || 0));
-  for (const m of matches) {
-    for (const p of m.players || []) {
-      if (p.id != null && localIds.includes(String(p.id))) continue;
-      if (p.id != null) return { id: String(p.id), name: p.name || '' };
-    }
-  }
-  return null;
 }
 
 async function syncMyMatches() {
@@ -748,30 +625,22 @@ function saveFinishedReplay(r) {
     replayLog('save fail: ' + err);
     try { if (Notification.isSupported()) new Notification({ title: '行车记录仪', body: '录像保存失败：' + err }).show(); } catch (e) {}
     send('replay:recording', { active: !!(replayRecorder && replayRecorder.status().active), error: err });
-    if (r && r.testMode) send('replay:testResult', { ok: false, error: err });
     return;
   }
   try {
     const dir = localReplaysDir();
     fs.mkdirSync(dir, { recursive: true });
-    let filename;
-    if (r.testMode) {
-      // 测试录像：随机负数 ID 命名，便于列表解析且绝不会被误当作真实对局
-      filename = encodeReplayKey({ fid: String(r.fid || '0'), uploaderId: String(r.uploaderId || '0'), uploaderName: '[测试]', teamId: 0, mapId: 0, ts: Date.now() }).split('/').pop();
-    } else {
-      const meta = uploaderMetaFor(r.fid, tracker);
-      filename = /^\d+$/.test(String(r.fid)) && meta.uploaderId
-        ? encodeReplayKey({ fid: r.fid, uploaderId: meta.uploaderId, uploaderName: meta.uploaderName, teamId: meta.teamId, mapId: meta.mapId, ts: Date.now() }).split('/').pop()
-        : 'nofid_' + Date.now() + '.mp4';
-    }
+    const meta = uploaderMetaFor(r.fid, tracker);
+    const filename = /^\d+$/.test(String(r.fid)) && meta.uploaderId
+      ? encodeReplayKey({ fid: r.fid, uploaderId: meta.uploaderId, uploaderName: meta.uploaderName, teamId: meta.teamId, mapId: meta.mapId, ts: Date.now() }).split('/').pop()
+      : 'nofid_' + Date.now() + '.mp4';
     const dest = path.join(dir, filename);
     try { fs.renameSync(r.file, dest); } catch (e) { fs.copyFileSync(r.file, dest); fs.unlinkSync(r.file); } // 录制中改了保存目录时会跨盘
     try { if (r.dir) fs.rmSync(r.dir, { recursive: true, force: true }); } catch (e) {}
     const sz = fs.statSync(dest).size;
     replayLog('save: 已保存 ' + filename + ' (' + sz + 'B, ' + r.durationSec + 's, ' + (r.hasAudio ? '含声音' : '纯画面') + (r.segments > 1 ? ', ' + r.segments + '段' : '') + ')');
     send('replay:changed', null);
-    if (r.testMode) send('replay:testResult', { ok: true, file: filename, size: sz });
-    else { try { if (Notification.isSupported()) new Notification({ title: '行车记录仪', body: '本局录像已保存到本地' }).show(); } catch (e) {} }
+    try { if (Notification.isSupported()) new Notification({ title: '行车记录仪', body: '本局录像已保存到本地' }).show(); } catch (e) {}
   } catch (err) {
     replayLog('save fail: ' + String((err && err.message) || err));
   }
@@ -832,15 +701,7 @@ function registerIpc() {
       watcher = new LogWatcher({ dir: next.logDir, pollMs: next.pollMs, parser });
       watcher.start();
     }
-    if (next.apiDailyLimit !== before.apiDailyLimit && usage) {
-      usage.limit = next.apiDailyLimit ?? 120;
-    }
     if (tracker) tracker.setMultiAccountBond(!!next.multiAccountBond);
-    // 输入钩子开关：关闭时立即停止全局钩子（反作弊最稳妥）
-    if (next.inputHookEnabled !== before.inputHookEnabled) {
-      if (!next.inputHookEnabled && inputHook) inputHook.stop();
-      inputHookOk = false;
-    }
     if (next.banPollEnabled !== before.banPollEnabled || next.matchSyncEnabled !== before.matchSyncEnabled) {
       startSyncTimers();
     }
@@ -878,7 +739,6 @@ function registerIpc() {
   ipcMain.handle('report:dragon', async (e, stbid) => {
     const r = await analyzer.buildDragonReport(stbid);
     if (r && r.stbid != null) tracker.observe(r.stbid, null);
-    send('budget', budgetPayload({}));
     return r;
   });
   // 单局复盘：每个人的单场龙区分、龙/区/泯、功劳最大/锅最大（1 次请求，24 小时缓存；打开对局详情时通常已缓存）
@@ -887,11 +747,9 @@ function registerIpc() {
     if (!/^\d+$/.test(id)) return { error: 'noFid', fid: id };
     const local = matchDetail(id);
     const r = await analyzer.buildMatchReview(id, local ? local.winnerTeam : undefined);
-    send('budget', budgetPayload({}));
     return r;
   });
   ipcMain.handle('app:version', () => versionInfo);
-  ipcMain.handle('usage:get', () => (usage ? { used24h: usage.count(), limit24h: usage.limit, calls: client ? client.networkCalls || 0 : 0 } : null));
   ipcMain.handle('api:health', () => (apiHealth ? apiHealth.last : null));
   ipcMain.handle('match:queryCurrent', () => queryCurrentMatch());
   ipcMain.handle('match:queryRoster', (e, players) => queryCurrentMatch(players));
@@ -1003,14 +861,6 @@ function registerIpc() {
     const newly = await syncBanList();
     return { list: tracker.listBans(), lastSync: tracker.data.lastBanSync, newly };
   });
-  ipcMain.handle('test:banNotify', () => {
-    const p = pickEncounteredPlayer();
-    if (!p) return { ok: false, message: '本地还没有遇到过任何玩家，无法模拟' };
-    showBanNotification([p.id], { [p.id]: p.name || ('玩家 ' + p.id) }); // 系统通知（尽力而为）
-    send('bans:alert', { players: [{ id: p.id, name: p.name || ('玩家 ' + p.id), rating: null }] }); // 应用内对话框（一定可见）
-    return { ok: true, message: `已模拟提醒：${p.name || p.id}（ID ${p.id}）被封` };
-  });
-
   // ---- 对局录像（IPC） ----
   // 播放前准备：旧版 WebM 先无损补索引（只做一次，几秒钟），返回可拖动播放的 replay:// 地址
   ipcMain.handle('replay:prepare', async (e, key) => {
@@ -1126,26 +976,6 @@ function registerIpc() {
     } catch (e) { return { ok: false, message: String((e && e.message) || e) }; }
   });
 
-  // 录制测试：录 60 秒，只存本地（排查桌面采集用）
-  ipcMain.handle('replay:testRecord', async () => {
-    if (!replayRecorder) return { ok: false, message: '未初始化' };
-    if (replayRecorder.status().active) {
-      replayLog('testRecord: 先中止残留录制 fid=' + (replayRecorder.current ? replayRecorder.current.fid : '?'));
-      replayRecorder.abort();
-      await new Promise((r) => setTimeout(r, 800));
-    }
-    replayLog('testRecord: 开始 60 秒测试录制');
-    const r5 = () => '-' + String(Math.floor(10000 + Math.random() * 90000)); // 负数 5 位随机（真实ID为正数，负数绝不可能误上传）
-    const tFid = r5();
-    const tUid = r5();
-    const rc = config.get();
-    const r = await replayRecorder.start({ fid: tFid, map: '录制测试', quality: rc.replayQuality, fps: rc.replayFps, bitrateMbps: rc.replayBitrateMbps, exposure: rc.replayExposure, audio: rc.replayAudio, testMode: true, testUploaderId: tUid, displayId: rc.replayDisplayId || '', saveDir: localReplaysDir() });
-    replayLog('testRecord: fid=' + tFid + ' uploaderId=' + tUid);
-    if (!r.ok) return { ok: false, message: replayRecorder.lastError || '启动失败' };
-    testRecordTimer = setTimeout(() => { testRecordTimer = null; replayLog('testRecord: 60 秒到，停止'); replayRecorder.stop(); }, 60000);
-    send('replay:recording', replayRecorder.status());
-    return { ok: true, message: '开始录制 60 秒（只存本地，不上传）' };
-  });
   ipcMain.handle('shell:open', (e, url) => {
     if (/^https?:\/\//.test(url || '')) shell.openExternal(url);
     return true;

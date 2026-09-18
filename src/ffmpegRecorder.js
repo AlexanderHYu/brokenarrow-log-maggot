@@ -488,8 +488,7 @@ class FfmpegRecorder {
     const s = new Session(this, {
       fid: opts.fid, map: opts.map, displayId: opts.displayId || '',
       quality: Number(opts.quality) || 0, fps: Number(opts.fps) || 30, bitrateMbps: Number(opts.bitrateMbps) || 8, exposure: normExposure(opts.exposure),
-      audio: opts.audio === 'off' ? 'off' : 'default', saveDir: opts.saveDir,
-      testMode: !!opts.testMode, testUploaderId: opts.testUploaderId
+      audio: opts.audio === 'off' ? 'off' : 'default', saveDir: opts.saveDir
     });
     this.session = s;
     try {
@@ -515,7 +514,7 @@ class FfmpegRecorder {
     this.session = null;
     this._stopPreview();
     this._emitStatus();
-    const base = () => ({ fid: s.fid, map: s.map, testMode: s.opts.testMode, uploaderId: s.opts.testUploaderId || '', dir: s.dir });
+    const base = () => ({ fid: s.fid, map: s.map, dir: s.dir });
     s.finish().then((r) => {
       if (this.onFinished) this.onFinished({ ...r, ...base() });
     }).catch((e) => {
