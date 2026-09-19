@@ -6,6 +6,8 @@
 // 出兵花费对齐「出兵分 − 退款分」，损失对齐「损失分」。队伍总数和官方一致，单个单位的花费仍是估算。
 // 单位的击杀分：数据里每个单位只有击杀数、没有击杀分，所以把这个人的总击杀分按各单位击杀数分下去
 // （单位击杀数之和和玩家击杀数九成以上完全相等），也是估算。
+// WasRefunded 不是「取消出兵」，而是单位回收了：飞机返航、卡车开回去、开局卖掉。返航的飞机照样打了仗，
+// 所以每条记录都算一次出兵（飞机就是一个架次）；官方按原价全额退款，所以花费里不算它。
 const DS = require('./dragonScore');
 const MT = require('./matchTitles');
 
@@ -61,9 +63,9 @@ function buildMatchReport(mi, opts = {}) {
       const refunded = !!u.WasRefunded;
       const dead = !!u.DeathTime;
       const life = dead && u.SpawnTime ? Math.max(0, num(u.DeathTime) - num(u.SpawnTime)) : null;
+      deployedN++;
       if (refunded) refundN++;
       else {
-        deployedN++;
         spent += cost;
         if (u.SpawnTime) timeline[team].spawn[minuteOf(u.SpawnTime)] += cost;
       }
@@ -75,7 +77,7 @@ function buildMatchReport(mi, opts = {}) {
       }
       // 按单位型号聚合（玩家内 / 队伍内）
       for (const [map, key] of [[mine, u.Id], [unitAgg, team + ':' + u.Id]]) {
-        const a = map.get(key) || { id: u.Id, name: e[2], role: e[0], country: e[3], team, count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [], users: new Set(), spent: 0, lost: 0, destr: 0 };
+        const a = map.get(key) || { id: u.Id, name: e[2], role: e[0], country: e[3], team, count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [], users: new Set(), spent: 0, lost: 0, destr: 0, price: cost };
         a.count++;
         if (!refunded) a.spent += cost;
         if (dead) a.lost += lossCost;
@@ -177,11 +179,12 @@ function buildMatchReport(mi, opts = {}) {
 }
 
 function finishUnit(a) {
-  const deployed = a.count - a.refunded;
+  const deployed = a.count; // 每条记录都是一次出兵（返航的也算）
   const spent = a.spent;
   return {
     id: a.id, name: a.name, role: a.role, roleName: ROLE_NAME[a.role] || ROLE_NAME.null, team: a.team,
-    cost: deployed ? Math.round(spent / deployed) : null,
+    cost: Math.round(a.price), // 估算单价（含配装）
+    value: Math.round(a.count * a.price), // 出动价值：架次 × 单价（返航的也算，使用率用这个）
     count: a.count, deployed, refunded: a.refunded, dead: a.dead, spent: Math.round(spent), lost: Math.round(a.lost),
     deathRate: deployed ? Math.round((a.dead / deployed) * 100) : null,
     lifeMedian: a.lives.length ? Math.round(median(a.lives)) : null,

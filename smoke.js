@@ -301,7 +301,10 @@ app.whenReady().then(async () => {
         out.titleI18nOk = I18N.t('title.weightlifter') === '举重冠军' && /第 12 分钟/.test(I18N.t('title.deserter.tip', { min: 12 }));
         out.dragonRolesText = dp ? ([...dp.querySelectorAll('.mg-meta .dim')].map((x) => x.textContent).find((t) => /角色|Role/.test(t)) || '') : '';
         out.hasMatchReport = !!document.getElementById('reportModal') && typeof openMatchReport === 'function' && typeof window.api.matchReport === 'function' && !!document.getElementById('btnMdReport');
-        showUpdate({ version: '9.9.9', current: '4.0.2', url: 'https://example.invalid' });
+        showUpdate({ version: '9.9.8', current: '4.0.3', mode: 'auto', status: 'ready' });
+        out.updateReadyInstallBtn = !document.getElementById('btnUpdateInstall').classList.contains('hidden') && document.getElementById('btnUpdateOpen').classList.contains('hidden');
+        showUpdate({ version: '9.9.9', current: '4.0.2', url: 'https://example.invalid', mode: 'manual', status: 'available' });
+        out.updateManualOpenBtn = document.getElementById('btnUpdateInstall').classList.contains('hidden') && !document.getElementById('btnUpdateOpen').classList.contains('hidden');
         out.updateBannerShown = !(document.getElementById('updateBanner') || {}).classList.contains('hidden') && /9\.9\.9/.test(document.getElementById('updateText').textContent);
         document.getElementById('btnUpdateClose').click();
         out.updateBannerClosed = document.getElementById('updateBanner').classList.contains('hidden');

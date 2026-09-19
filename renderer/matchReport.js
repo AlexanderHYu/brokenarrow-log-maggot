@@ -128,7 +128,7 @@ const MR_PCOLS = [
   ['dmg', '伤害 / 承伤', (p) => mrNum(p.dmg) + ' / ' + mrNum(p.dmgTaken)],
   ['spent', '出兵', (p) => p.unitsDeployed + ' 个 · ' + mrNum(p.spent)],
   ['survival', '存活率', (p) => (p.survival == null ? '-' : p.survival + '%')],
-  ['lifeMedian', '阵亡存活·中位', (p) => mrSec(p.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）'],
+  ['lifeMedian', '阵亡存活·中位', (p) => mrSec(p.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）'],
   ['dPerCost', '击杀分/花费', (p) => p.dPerCost ?? '-'],
   ['supply', '补给', (p) => mrNum(p.supply)],
   ['obj', '占点', (p) => p.obj]
@@ -169,13 +169,13 @@ function mrPlayerDetail(p) {
     p.buildings ? '拆建筑 ' + p.buildings + ' 栋' : '',
     p.ffDestroyed ? '误伤友军 ' + mrNum(p.ffDestroyed) : '',
     p.ffLost ? '被友军误伤 ' + mrNum(p.ffLost) : '',
-    p.unitsRefunded ? '退款 ' + p.unitsRefunded + ' 个（' + mrNum(p.refundScore) + '）' : '',
+    p.unitsRefunded ? '返航/回收 ' + p.unitsRefunded + ' 次（退回 ' + mrNum(p.refundScore) + '）' : '',
     p.leftAtMin != null ? '第 ' + p.leftAtMin + ' 分钟离开' : '',
     p.exp ? '经验 ' + mrNum(p.exp) : ''
   ].filter(Boolean).map((t) => '<span>' + esc(t) + '</span>').join('');
-  const units = (p.units || []).map((u) => `<tr><td>${esc(u.name)}</td><td class="dim">${u.roleName}</td><td>${u.deployed}${u.refunded ? '<span class="dim">（退 ' + u.refunded + '）</span>' : ''}</td><td>${u.dead}</td><td>${u.deathRate == null ? '-' : u.deathRate + '%'}</td><td>${mrSec(u.lifeMedian)}</td><td>${mrNum(u.dmg)}</td><td>${u.kills}</td><td>${mrNum(u.destr)}</td><td>${mrNum(u.spent)}</td></tr>`).join('');
+  const units = (p.units || []).map((u) => `<tr><td>${esc(u.name)}</td><td class="dim">${u.roleName}</td><td>${u.deployed}${u.refunded ? '<span class="dim">（回收 ' + u.refunded + '）</span>' : ''}</td><td>${u.dead}</td><td>${u.deathRate == null ? '-' : u.deathRate + '%'}</td><td>${mrSec(u.lifeMedian)}</td><td>${mrNum(u.dmg)}</td><td>${u.kills}</td><td>${mrNum(u.destr)}</td><td>${mrNum(u.spent)}</td></tr>`).join('');
   return `${roleBar}${parts}<div class="mr-extra">${extra}</div>
-    <table class="mr-table mini"><thead><tr><th>单位</th><th>兵种</th><th>出兵</th><th>阵亡</th><th>死亡率</th><th title="已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）">阵亡存活·中位</th><th>伤害</th><th>击杀</th><th>击杀分（估）</th><th>花费</th></tr></thead><tbody>${units}</tbody></table>`;
+    <table class="mr-table mini"><thead><tr><th>单位</th><th>兵种</th><th title="出动次数，飞机按架次算；括号里是其中返航/回收的">出兵</th><th>阵亡</th><th>死亡率</th><th title="已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）">阵亡存活·中位</th><th>伤害</th><th>击杀</th><th>击杀分（估）</th><th>花费</th></tr></thead><tbody>${units}</tbody></table>`;
 }
 function mrBindPlayers() {
   const body = $('mrTabBody');
@@ -192,10 +192,10 @@ const MR_UCOLS = [
   ['roleName', '兵种', (u) => u.roleName],
   ['team', '队伍', (u) => `<span class="t${u.team}">${mrTeamName(u.team)}</span>`],
   ['usage', '使用率', (u) => (u.usage == null ? '-' : `<span class="mr-usage"><i style="width:${Math.min(100, u.usage * 3)}%"></i>${u.usage}%</span>`)],
-  ['deployed', '出兵', (u) => u.deployed + (u.refunded ? '<span class="dim">（退 ' + u.refunded + '）</span>' : '')],
-  ['cost', '均价', (u) => mrNum(u.cost)],
+  ['deployed', '出兵', (u) => u.deployed + (u.refunded ? '<span class="dim">（回收 ' + u.refunded + '）</span>' : ''), '出动次数，飞机按架次算；括号里是其中返航/回收的（回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费）'],
+  ['cost', '单价', (u) => mrNum(u.cost)],
   ['deathRate', '死亡率', (u) => (u.deathRate == null ? '-' : `<span class="${u.deathRate >= 80 ? 'loss' : u.deathRate <= 30 ? 'win' : ''}">${u.deathRate}%</span>`)],
-  ['lifeMedian', '阵亡存活·中位', (u) => mrSec(u.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）'],
+  ['lifeMedian', '阵亡存活·中位', (u) => mrSec(u.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）'],
   ['dmg', '伤害', (u) => mrNum(u.dmg)],
   ['kills', '击杀', (u) => u.kills],
   ['destr', '击杀分（估）', (u) => mrNum(u.destr)],
@@ -203,14 +203,14 @@ const MR_UCOLS = [
   ['users', '使用者', (u) => `<span class="dim">${esc(u.users.join('、'))}</span>`]
 ];
 function mrUnits(r) {
-  const teamSpent = [0, 1].map((t) => r.teams[t].spent || 1);
+  const teamValue = [0, 1].map((t) => r.units.filter((u) => u.team === t).reduce((s, u) => s + (u.value || 0), 0) || 1);
   const list = r.units.filter((u) => mrUnitTeam === 'all' || String(u.team) === mrUnitTeam)
-    .map((u) => ({ ...u, usage: Math.round((u.spent / teamSpent[u.team]) * 1000) / 10 }));
+    .map((u) => ({ ...u, usage: Math.round(((u.value || 0) / teamValue[u.team]) * 1000) / 10 }));
   const s = mrSort.units;
   const head = MR_UCOLS.map(([k, n, , tip]) => `<th data-sort="${k}" class="${s.key === k ? 'sorted' : ''}"${tip ? ' title="' + tip + '"' : ''}>${n}${s.key === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`).join('');
   const rows = mrSortList(list, s).map((u) => `<tr>${MR_UCOLS.map(([, , f]) => `<td>${f(u)}</td>`).join('')}</tr>`).join('');
   const filt = [['all', '全部'], ['0', 'A 队'], ['1', 'B 队']].map(([k, n]) => `<button type="button" class="mr-tab small${mrUnitTeam === k ? ' active' : ''}" data-uteam="${k}">${n}</button>`).join('');
-  return `<div class="mr-filter">${filt}<span class="dim mr-hint">使用率 = 这个单位的花费占本队出兵花费的比例；死亡率 = 阵亡 ÷ 出兵（退款的不算）；击杀分/花费越高越赚；单位的击杀分是把这个人的总击杀分按各单位击杀数分下去的估算</span></div>
+  return `<div class="mr-filter">${filt}<span class="dim mr-hint">出兵 = 出动次数，飞机按架次算，返航后再出算两次；使用率 = 出动价值（出兵 × 单价）占本队的比例；死亡率 = 阵亡 ÷ 出兵；回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费；击杀分/花费越高越赚；单位的击杀分是把这个人的总击杀分按各单位击杀数分下去的估算</span></div>
     <div class="mr-scroll"><table class="mr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function mrBindUnits() {

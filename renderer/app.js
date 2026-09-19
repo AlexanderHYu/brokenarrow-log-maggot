@@ -854,14 +854,25 @@ const BATRACE_URL = 'https://app.batrace.top/';
 const MAGGOT_SITE_URL = 'https://github.com/Zawinzala/Broken-Arrow-Maggot';
 
 function openLink(url) { if (url) BA.openExternal(url); }
-// 新版本提醒横幅（关掉后本次运行不再弹同一个版本）
+// 新版本横幅：安装版显示下载进度和「重启更新」；免安装版提示去下载页
+// 关掉后同一版本、同一阶段不再弹（下载好了会再提示一次）
 let updateUrl = null, updateDismissed = null;
 function showUpdate(info) {
-  if (!info || !info.version || updateDismissed === info.version) return;
+  if (!info || !info.version) return;
+  const stage = info.version + ':' + (info.status || '');
+  if (updateDismissed === stage) return;
   updateUrl = info.url;
-  $('updateText').textContent = '🆕 有新版本 v' + info.version + '（当前 v' + info.current + '）。安装版直接运行新的 Setup 覆盖安装；免安装版换成新的 exe 即可，设置和档案都会保留。';
+  const v = 'v' + info.version, cur = '（当前 v' + info.current + '）';
+  let text;
+  if (info.mode === 'auto' && info.status === 'ready') text = '✅ 新版本 ' + v + ' 已经下载好了。点「重启更新」马上装好并重新打开；不点的话，下次关软件时自动装。';
+  else if (info.mode === 'auto') text = '⬇ 发现新版本 ' + v + cur + '，正在后台下载… ' + (info.percent || 0) + '%';
+  else if (info.portable) text = '🆕 有新版本 ' + v + cur + '。免安装版不能自动更新，下载新的 exe 换掉旧的即可；推荐改用安装版（Setup），以后自动更新。设置和档案都会保留。';
+  else text = '🆕 有新版本 ' + v + cur + '。下载新的 Setup 运行覆盖安装即可，设置和档案都会保留。';
+  $('updateText').textContent = text;
+  $('btnUpdateInstall').classList.toggle('hidden', !(info.mode === 'auto' && info.status === 'ready'));
+  $('btnUpdateOpen').classList.toggle('hidden', info.mode === 'auto');
   $('updateBanner').classList.remove('hidden');
-  $('updateBanner').dataset.version = info.version;
+  $('updateBanner').dataset.stage = stage;
 }
 
 const PLAYER_URL = (id) => `https://app.batrace.top/player/${id}`;
@@ -1815,7 +1826,8 @@ function bindUI() {
     runDragon(lastReport.id, lastReport.name);
   });
   on('btnUpdateOpen', 'click', () => openLink(updateUrl));
-  on('btnUpdateClose', 'click', () => { const b = $('updateBanner'); updateDismissed = b.dataset.version || null; b.classList.add('hidden'); });
+  on('btnUpdateClose', 'click', () => { const b = $('updateBanner'); updateDismissed = b.dataset.stage || null; b.classList.add('hidden'); });
+  on('btnUpdateInstall', 'click', () => { $('updateText').textContent = '正在关闭并安装新版本…'; BA.installUpdate(); });
   on('btnBatraceGateClose', 'click', () => { const b = $('batraceGateBanner'); if (b) b.classList.add('hidden'); });
   const link = (id, url) => { const el = $(id); if (el) el.addEventListener('click', (e) => { e.preventDefault(); openLink(url); }); };
   link('linkBatrace', BATRACE_URL);

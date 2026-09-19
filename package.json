@@ -1,6 +1,6 @@
 {
   "name": "broken-arrow-log-assistant",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "description": "龙区分类器 - 基于断箭 GameLogs 日志与 BATrace 数据的对局复盘工具",
   "main": "main.js",
   "scripts": {
@@ -53,7 +53,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "龙区分类器"
+      "shortcutName": "龙区分类器",
+      "artifactName": "DragonClassifier-Setup-${version}.${ext}"
     },
     "extraResources": [
       {
@@ -64,6 +65,19 @@
           "LICENSE.txt"
         ]
       }
-    ]
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AlexanderHYu",
+        "repo": "brokenarrow-log-maggot"
+      }
+    ],
+    "portable": {
+      "artifactName": "DragonClassifier-Portable-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

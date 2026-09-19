@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
   // 版本
   getVersion: () => ipcRenderer.invoke('app:version'),
   getUpdateInfo: () => ipcRenderer.invoke('update:get'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
   onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (e, d) => cb(d)),
 
   // BATrace 稳定性
