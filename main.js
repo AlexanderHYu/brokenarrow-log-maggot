@@ -723,7 +723,13 @@ function registerIpc() {
     try {
       const res = await client.searchPlayers(query, 20);
       const list = (res && res.players) || [];
-      for (const p of list) if (p && p.id != null) tracker.observe(p.id, p.name);
+      for (const p of list) {
+        if (!p || p.id == null) continue;
+        tracker.observe(p.id, p.name);
+        // 搜索接口的 rating 是 BATrace 档案里的旧值（updated_at 可能是几周前），本地查到过更新的就一并带上
+        const snap = tracker.playerSnapshot(p.id);
+        if (snap && snap.elo != null) { p.localElo = snap.elo; p.localEloAt = snap.at || 0; }
+      }
       return res;
     } catch (err) {
       // API 不可用 → 离线兜底：本地见过的玩家匹配
@@ -732,7 +738,11 @@ function registerIpc() {
   });
   ipcMain.handle('report:player', async (e, stbid) => {
     const r = await analyzer.buildReport(stbid);
-    if (r && r.stbid != null) tracker.observe(r.stbid, r.name || null);
+    if (r && r.stbid != null) {
+      tracker.observe(r.stbid, r.name || null);
+      // 报告里的 ELO 是最近一场排位的赛后分，存进本地，搜索结果下次就显示这个
+      if (r.elo != null && !r.fallback) tracker.savePlayerSnapshot(r.stbid, { elo: r.elo, winRate: r.winRate, kd: r.kd, matchCount: r.matchCount });
+    }
     return r;
   });
   // 龙区分（取代蛆指数）：最近 20 场，1 次请求
@@ -748,6 +758,13 @@ function registerIpc() {
     const local = matchDetail(id);
     const r = await analyzer.buildMatchReview(id, local ? local.winnerTeam : undefined);
     return r;
+  });
+  // 单局复盘页（总览 / 玩家 / 单位 / 时间线），和龙区复盘共用同一次请求
+  ipcMain.handle('match:report', async (e, fid) => {
+    const id = String(fid || '');
+    if (!/^\d+$/.test(id)) return { error: 'noFid', fid: id };
+    const local = matchDetail(id);
+    return analyzer.buildMatchReport(id, local ? local.winnerTeam : undefined, tracker.localIds());
   });
   ipcMain.handle('app:version', () => versionInfo);
   ipcMain.handle('api:health', () => (apiHealth ? apiHealth.last : null));

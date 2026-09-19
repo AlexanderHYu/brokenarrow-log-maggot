@@ -350,6 +350,8 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-widt
 .chip:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
 .chip .s-lv { color: var(--dim); }
 .chip .s-elo { color: var(--warn); font-weight: 700; }
+.chip .s-elo.stale { color: var(--dim); font-weight: 400; }
+.chip .s-elo small { font-size: 10px; margin-left: 1px; }
 .chip .s-id { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 .chip .s-id::before { content: '·'; margin-right: 4px; }
 .chip .s-lv::before { content: '·'; margin-right: 4px; }
@@ -861,3 +863,76 @@ table.matches tbody tr:hover { background: var(--row-hover); }
 /* 设置底部的「关于」小字 */
 .settings-about { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.7; }
 .settings-about p { margin: 2px 0; }
+
+/* ===== 单局复盘页 ===== */
+.modal-box.report-box { width: 1100px; max-width: 96vw; max-height: 92vh; overflow-y: auto; }
+.report-box .t0 { color: var(--accent); }
+.report-box .t1 { color: var(--bad); }
+.mr-teams { display: flex; align-items: stretch; gap: 10px; margin: 6px 0 12px; }
+.mr-team { flex: 1; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; border-top: 3px solid var(--accent); }
+.mr-team.t1 { border-top-color: var(--bad); }
+.mr-team.won { box-shadow: 0 0 0 1px rgba(76, 217, 138, .35) inset; }
+.mr-team-name { font-weight: 700; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.mr-team.t0 .mr-team-name { color: var(--accent); }
+.mr-team.t1 .mr-team-name { color: var(--bad); }
+.mr-fac { font-size: 12px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; }
+.mr-team-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12px; color: var(--dim); }
+.mr-team-stats b { color: var(--text); }
+.mr-vs { align-self: center; font-weight: 800; color: var(--dim); }
+.mr-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.mr-tab { background: none; border: none; color: var(--dim); padding: 8px 14px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; }
+.mr-tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 700; }
+.mr-tab.small { padding: 4px 10px; font-size: 12px; border: 1px solid var(--line); border-radius: 999px; }
+.mr-tab.small.active { background: var(--accent-soft); border-color: var(--accent-line); }
+.mr-sec { margin-bottom: 16px; }
+.mr-sec h4 { margin: 0 0 8px; font-size: 14px; }
+.mr-sec h4 .dim { font-weight: 400; font-size: 12px; }
+.mr-insights { margin: 0; padding-left: 18px; line-height: 1.8; font-size: 13px; }
+.mr-cmp { display: grid; grid-template-columns: 90px 1fr 90px; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.mr-cmp-a { text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+.mr-cmp-b { color: var(--bad); font-variant-numeric: tabular-nums; }
+.mr-cmp-bar { position: relative; display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--card3); }
+.mr-cmp-bar i.a { background: rgba(90, 162, 255, .55); }
+.mr-cmp-bar i.b { background: rgba(255, 107, 107, .5); }
+.mr-cmp-bar em { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 11px; color: var(--text); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.mr-roles { display: grid; grid-template-columns: 50px 1fr; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.mr-rolebar { display: flex; height: 20px; border-radius: 4px; overflow: hidden; background: var(--card3); }
+.mr-rolebar.small { height: 16px; margin-bottom: 6px; }
+.mr-rolebar i { display: grid; place-items: center; font-style: normal; font-size: 10.5px; color: #111; white-space: nowrap; overflow: hidden; }
+.mr-bests { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 16px; font-size: 13px; }
+.mr-hint { font-size: 12px; margin-bottom: 6px; }
+.mr-scroll { overflow-x: auto; }
+.mr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.mr-table th { text-align: left; font-weight: 600; color: var(--dim); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; }
+.mr-table th.sorted { color: var(--text); }
+.mr-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top; font-variant-numeric: tabular-nums; }
+.mr-table.mini { font-size: 12px; margin-top: 6px; }
+.mr-table.mini th { cursor: default; }
+.mr-prow { cursor: pointer; }
+.mr-prow:hover { background: var(--row-hover); }
+.mr-prow.me td { background: var(--accent-soft); }
+.mr-prow.open td { border-bottom-color: transparent; }
+.mr-pdetail td { background: var(--card2); white-space: normal; }
+.mr-titles { margin-top: 2px; }
+.mr-titles .dg-tag { margin-left: 0; margin-right: 4px; }
+.mr-me { font-size: 10px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: #fff; }
+.mr-parts, .mr-extra { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--dim); margin: 4px 0; }
+.mr-parts b { color: var(--text); }
+.mr-filter { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.mr-filter .mr-hint { margin: 0 0 0 8px; }
+.mr-usage { display: inline-flex; align-items: center; gap: 6px; }
+.mr-usage i { display: inline-block; height: 8px; min-width: 2px; background: var(--accent); border-radius: 2px; width: 0; }
+.mr-chart { width: 100%; height: auto; display: block; }
+.mr-chart .mr-grid { stroke: var(--line); }
+.mr-chart .mr-ax { fill: var(--dim); font-size: 11px; }
+.mr-chart .mr-ax.faint { opacity: .5; }
+.mr-chart .mr-ax.t0 { fill: var(--accent); }
+.mr-chart .mr-ax.t1 { fill: var(--bad); }
+.mr-chart .mr-line { fill: none; stroke-width: 2.5; }
+.mr-chart .mr-line.t0 { stroke: var(--accent); }
+.mr-chart .mr-line.t1 { stroke: var(--bad); }
+.mr-chart .mr-bar.t0 { fill: rgba(90, 162, 255, .7); }
+.mr-chart .mr-bar.t1 { fill: rgba(255, 107, 107, .7); }
+.mr-chart .mr-ev { stroke-dasharray: 4 3; stroke-width: 1.5; }
+.mr-chart .mr-ev.t0 { stroke: var(--accent); }
+.mr-chart .mr-ev.t1 { stroke: var(--bad); }

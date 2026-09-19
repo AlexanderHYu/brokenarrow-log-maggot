@@ -249,6 +249,7 @@ function togglePrevView() {
     for (const p of d.players) prevRows[p.id] = { id: p.id, name: p.name, team: p.team, status: 'idle' };
     $('currentCardTitle').textContent = I18N.t('match.prev');
     const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('match.backToCurrent');
+    const mrb = $('btnMatchReport'); if (mrb) mrb.classList.toggle('hidden', !/^\d+$/.test(String(d.fid || '')));
     $('matchInfo').innerHTML = `<span>${I18N.t('match.map', { v: '<b>' + esc(d.map || I18N.t('common.unknown')) + '</b>' })}</span><span>${I18N.t('match.fid', { v: '<b>' + esc(d.fid || '-') + '</b>' })}</span><span>${I18N.t('match.endTime', { v: '<b>' + fmtTime(d.endTime) + '</b>' })}</span><span>${I18N.t('match.playersN', { n: d.players.length })}</span><span id="prevReviewStatus"></span>`;
     $('queryStatus').textContent = '';
     renderPrevGrid();
@@ -272,6 +273,7 @@ function exitPrevView() {
   prevRows = {};
   prevReview = {};
   const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('btn.prevMatch');
+  const mrb = $('btnMatchReport'); if (mrb) mrb.classList.add('hidden');
   renderSession(session);
 }
 function resetPrevIfViewing() {
@@ -281,6 +283,7 @@ function resetPrevIfViewing() {
   prevRows = {};
   prevReview = {};
   const b = $('btnPrevMatch'); if (b) b.textContent = I18N.t('btn.prevMatch');
+  const mrb = $('btnMatchReport'); if (mrb) mrb.classList.add('hidden');
   const t = $('currentCardTitle');
   if (t) t.textContent = session.current ? I18N.t('match.current') : I18N.t('match.room');
 }
@@ -300,6 +303,20 @@ function renderPrevGrid() {
   $('teamGrid').innerHTML = html;
 }
 
+// 搜索结果里的 ELO：搜索接口给的是 BATrace 档案里的旧分数（可能几周没更新），
+// 本地查到过更新的就显示本地的；否则把旧分数标灰并注明日期
+function searchEloHtml(p) {
+  const upd = p.updated_at ? Date.parse(p.updated_at) : 0;
+  const md = (t) => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); };
+  if (p.localElo != null && (!upd || (p.localEloAt || 0) > upd)) {
+    return `<span class="s-elo" title="${esc('最近一次查到的分数（' + md(p.localEloAt) + '）')}">${Math.round(p.localElo)}</span>`;
+  }
+  if (p.rating == null) return '<span class="s-elo">?</span>';
+  const stale = upd && Date.now() - upd > 3 * 86400000;
+  if (!stale) return `<span class="s-elo">${Math.round(p.rating)}</span>`;
+  return `<span class="s-elo stale" title="${esc('BATrace 档案里的旧分数，最后更新于 ' + new Date(upd).toISOString().slice(0, 10) + '，可能已经过时；点开看最新分数')}">${Math.round(p.rating)}<small>（${md(upd)}）</small></span>`;
+}
+
 async function loadReport(stbid, name) {
   const area = $('reportArea');
   area.innerHTML = '<div class="dim">' + esc(I18N.t('report.generating')) + '</div>';
@@ -309,6 +326,8 @@ async function loadReport(stbid, name) {
     if (r.error) { area.innerHTML = `<div class="loss">${esc(r.error)}</div>`; area.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     lastReport = { id: stbid, name: name || stbid };
     renderReport(r, name);
+    // 报告里是最新分数：顺手更新搜索结果里这个人的 ELO
+    if (r.elo != null) document.querySelectorAll('.chip[data-id="' + String(stbid).replace(/\D/g, '') + '"] .s-elo').forEach((el) => { el.className = 's-elo'; el.title = ''; el.textContent = Math.round(r.elo); });
     area.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
     area.innerHTML = `<div class="loss">${esc(I18N.t('report.genFail', { msg: e.message }))}</div>`;
@@ -541,7 +560,10 @@ function pickReplay(items) {
   });
 }
 // ---------- 对局详情弹窗 ----------
+let mdFid = null; // 对局详情弹窗当前的对局号（「详细复盘」按钮用）
 async function openMatchDetail(fid) {
+  mdFid = fid;
+  const mdb = $('btnMdReport'); if (mdb) mdb.classList.toggle('hidden', !/^\d+$/.test(String(fid || '')));
   $('matchModal').classList.remove('hidden');
   $('matchTitle').textContent = I18N.t('modal.matchDetail');
   $('matchFid').textContent = I18N.t('match.id', { id: fid });
@@ -883,6 +905,7 @@ document.addEventListener('contextmenu', (e) => {
     const fid = rp.dataset.fid || '';
     const items = [];
     if (fid) items.push({ label: I18N.t('ctx.openMatchDetail'), action: () => openMatchDetail(fid) });
+    if (/^\d+$/.test(fid)) items.push({ label: '📊 详细复盘', action: () => openMatchReport(fid) });
     items.push({ label: I18N.t('ctx.openExternal'), action: () => BA.openReplayExternal(rp.dataset.key) });
     items.push({ label: I18N.t('ctx.openLocation'), action: () => BA.openLocalReplayFolder() });
     items.push({ label: I18N.t('ctx.deleteReplay'), action: async () => {
@@ -902,6 +925,7 @@ document.addEventListener('contextmenu', (e) => {
     items.push({ label: I18N.t('ctx.investigate'), action: () => openInvestigate(t.dataset.id, t.dataset.name) });
   }
   if (t.dataset.fid) {
+    if (/^\d+$/.test(t.dataset.fid)) items.push({ label: '📊 详细复盘', action: () => openMatchReport(t.dataset.fid) });
     items.push({ label: I18N.t('ctx.refreshMatch'), action: () => refreshMatchRow(t.dataset.fid) });
     // 对局档案行：右键可直接删除不要的对局记录（如手动收录错）
     if (t.classList && t.classList.contains('archive-row')) {
@@ -1762,6 +1786,8 @@ function bindUI() {
   on('btnConfirmNo', 'click', () => closeConfirm(false));
 
   on('btnPrevMatch', 'click', togglePrevView);
+  on('btnMatchReport', 'click', () => { if (prevMatch && prevMatch.fid) openMatchReport(prevMatch.fid); });
+  on('btnMdReport', 'click', () => { if (mdFid) { $('matchModal').classList.add('hidden'); openMatchReport(mdFid); } });
   on('btnReQuery', 'click', () => {
     if (querying) return;
     if (viewMode === 'prev' && prevMatch && prevMatch.players && prevMatch.players.length) {
@@ -1794,7 +1820,7 @@ function bindUI() {
       const list = data.players || [];
       const offlineNote = data.offline ? '<div class="dim">' + esc(I18N.t('dev.offlineNote')) + '</div>' : '';
       $('searchResults').innerHTML = offlineNote + (list.length
-        ? list.map((p) => `<span class="chip" data-id="${p.id}" data-name="${esc(p.name)}" data-link="${PLAYER_URL(p.id)}">${esc(p.name)}<span class="s-id">ID ${esc(p.id)}</span><span class="s-lv">Lv.${p.level ?? '?'}</span><span class="s-elo">${p.rating != null ? Math.round(p.rating) : '?'}</span></span>`).join('')
+        ? list.map((p) => `<span class="chip" data-id="${p.id}" data-name="${esc(p.name)}" data-link="${PLAYER_URL(p.id)}">${esc(p.name)}<span class="s-id">ID ${esc(p.id)}</span><span class="s-lv">Lv.${p.level ?? '?'}</span>${searchEloHtml(p)}</span>`).join('')
         : (data.offline ? '<span class="dim">' + I18N.t('dev.noLocalMatch') + '</span>' : '<span class="dim">' + I18N.t('dev.notFound') + '</span>'));
       document.querySelectorAll('.chip').forEach((el) => {
         el.addEventListener('click', () => loadReport(el.dataset.id, el.dataset.name));

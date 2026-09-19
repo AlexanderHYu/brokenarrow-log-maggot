@@ -300,6 +300,7 @@ app.whenReady().then(async () => {
         out.dragonRangeBar = !!(dp && dp.querySelector('.dg-range'));
         out.titleI18nOk = I18N.t('title.weightlifter') === '举重冠军' && /第 12 分钟/.test(I18N.t('title.deserter.tip', { min: 12 }));
         out.dragonRolesText = dp ? ([...dp.querySelectorAll('.mg-meta .dim')].map((x) => x.textContent).find((t) => /角色|Role/.test(t)) || '') : '';
+        out.hasMatchReport = !!document.getElementById('reportModal') && typeof openMatchReport === 'function' && typeof window.api.matchReport === 'function' && !!document.getElementById('btnMdReport');
         out.noMaggotLeft = !document.getElementById('btnMaggot') && !document.getElementById('maggotArea');
         // 顶栏心跳无「经代理」文案
         out.noProxyTextInHeartbeat = !((document.getElementById('onlineText') || {}).title || '').includes('经代理');

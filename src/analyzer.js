@@ -4,6 +4,7 @@
 const path = require('path');
 const { parseDataString } = require('./tracker');
 const { computeDragonScore, analyzeMatch } = require('./dragonScore');
+const { buildMatchReport } = require('./matchReport');
 
 // 地图名注册表：从 analysis 响应的 mapPerformance 免费收集真实地图名
 const MAP_NAMES = { 3: 'Baltiisk', 4: 'Coast', 6: 'River', 7: 'Dam', 9: 'Airport', 10: 'Frontiers', 11: 'Central Village', 12: 'Oil refinery', 13: 'Suwalki', 16: 'Klaipeda', 17: 'Ruda', 20: 'Parnu', 21: 'Chernyakhovsk', 22: 'Ignalina Powerplant' };
@@ -147,6 +148,19 @@ class Analyzer {
       if (a && a.categoryPreferences) rolesById[String(p.Id)] = { categoryPreferences: a.categoryPreferences, highlightUnits: a.highlightUnits };
     }
     return analyzeMatch(mi, fid, { winnerTeam, rolesById });
+  }
+
+  /**
+   * 单局复盘页：和龙区复盘同一次请求（/api/match，24 小时缓存），整理出总览、玩家明细、单位、时间线、本局要点
+   * @param {string} fid
+   * @param {number} [winnerTeam]
+   * @param {string[]} [localIds] 本机账号 ID（高亮「我」）
+   */
+  async buildMatchReport(fid, winnerTeam, localIds) {
+    const review = await this.buildMatchReview(fid, winnerTeam);
+    if (review.error) return review;
+    const res = await this.client.matchById(fid); // 刚拉过，走缓存
+    return buildMatchReport(res.matchInfo, { fid: String(fid), review, localIds, mapName });
   }
 
   // analysis 404 时的兜底：用 /api/players/info 的基础档案

@@ -33,10 +33,11 @@ function roleKeyOf(categoryType, role) {
     default: return null;
   }
 }
-// 单位库（/api/units 的 units）→ { 单位ID: [角色, 基础价格] }；模型文件里已存一份，运行时不用请求单位库
+// 单位库（/api/units 的 units）→ { 单位ID: [角色, 基础价格, 名称, 国家(1 俄 / 2 美), 类别] }；
+// 模型文件里已存一份，运行时不用请求单位库（名称、国家给对局复盘页用）
 function buildUnitMap(units) {
   const m = {};
-  for (const u of Array.isArray(units) ? units : []) m[u.id] = [roleKeyOf(u.category_type, u.role), Number(u.cost) || 0];
+  for (const u of Array.isArray(units) ? units : []) m[u.id] = [roleKeyOf(u.category_type, u.role), Number(u.cost) || 0, u.hud_name || u.name || '', Number(u.country_id) || 0, Number(u.category_type)];
   return m;
 }
 const unitMapOf = (um) => um || (MODEL && MODEL.units) || {};

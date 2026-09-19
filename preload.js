@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   playerReport: (stbid) => ipcRenderer.invoke('report:player', stbid),
   dragonReport: (stbid) => ipcRenderer.invoke('report:dragon', stbid),
   matchReview: (fid) => ipcRenderer.invoke('match:review', fid),
+  matchReport: (fid) => ipcRenderer.invoke('match:report', fid),
 
   // 版本
   getVersion: () => ipcRenderer.invoke('app:version'),
