@@ -1,6 +1,6 @@
 {
   "name": "broken-arrow-log-assistant",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "龙区分类器 - 基于断箭 GameLogs 日志与 BATrace 数据的对局复盘工具",
   "main": "main.js",
   "scripts": {

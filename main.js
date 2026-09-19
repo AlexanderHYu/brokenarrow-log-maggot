@@ -138,6 +138,9 @@ app.whenReady().then(() => {
   startSyncTimers();
   // API 稳定性灯：仅每小时检测一次（不启动即探，避免频繁请求）
   setInterval(() => probeApiHealth(), 3600 * 1000);
+  // 新版本提醒：启动 8 秒后查一次，之后每 6 小时查一次（只读 GitHub 公开接口）
+  setTimeout(checkForUpdate, 8000);
+  setInterval(checkForUpdate, 6 * 3600 * 1000);
 });
 
 app.on('before-quit', () => { if (replayRecorder) { try { replayRecorder.abort(); } catch (e) {} } closeBatraceGate(); });
@@ -602,6 +605,28 @@ async function probeApiHealth() {
 // ---------------- 版本信息（仅本地版本号，不做远程更新检查） ----------------
 const versionInfo = { current: app.getVersion(), latest: app.getVersion(), hasUpdate: false, announcement: '' };
 
+// ---------------- 新版本提醒 ----------------
+// 查本仓库 GitHub Release 的最新版本号，比当前新就在界面顶部提示；不下载、不自动安装
+const UPDATE_REPO = 'AlexanderHYu/brokenarrow-log-maggot';
+let updateInfo = null;
+function isNewerVersion(a, b) {
+  const pa = String(a).split('.').map((x) => parseInt(x, 10) || 0), pb = String(b).split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0); }
+  return false;
+}
+async function checkForUpdate() {
+  try {
+    const r = await net.fetch('https://api.github.com/repos/' + UPDATE_REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const latest = String(j.tag_name || '').replace(/^v/i, '');
+    if (latest && isNewerVersion(latest, app.getVersion())) {
+      updateInfo = { version: latest, current: app.getVersion(), url: j.html_url || ('https://github.com/' + UPDATE_REPO + '/releases/latest') };
+      send('update:available', updateInfo);
+    }
+  } catch (e) { /* 离线或 GitHub 不可用：下次再查 */ }
+}
+
 // ---------------- 对局录像辅助 ----------------
 function localReplaysDir() {
   const dir = String(config.get().replaySaveDir || '').trim();
@@ -767,6 +792,7 @@ function registerIpc() {
     return analyzer.buildMatchReport(id, local ? local.winnerTeam : undefined, tracker.localIds());
   });
   ipcMain.handle('app:version', () => versionInfo);
+  ipcMain.handle('update:get', () => updateInfo);
   ipcMain.handle('api:health', () => (apiHealth ? apiHealth.last : null));
   ipcMain.handle('match:queryCurrent', () => queryCurrentMatch());
   ipcMain.handle('match:queryRoster', (e, players) => queryCurrentMatch(players));

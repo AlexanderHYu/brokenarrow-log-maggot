@@ -4,6 +4,8 @@
 // 纯函数、无 I/O；龙/区/泯和称号由 dragonScore.analyzeMatch 算好后传进来。
 // 单位价格：单位库只有基础价格（不含配装），所以每个玩家按他自己的官方总数等比例缩放——
 // 出兵花费对齐「出兵分 − 退款分」，损失对齐「损失分」。队伍总数和官方一致，单个单位的花费仍是估算。
+// 单位的击杀分：数据里每个单位只有击杀数、没有击杀分，所以把这个人的总击杀分按各单位击杀数分下去
+// （单位击杀数之和和玩家击杀数九成以上完全相等），也是估算。
 const DS = require('./dragonScore');
 const MT = require('./matchTitles');
 
@@ -46,6 +48,9 @@ function buildMatchReport(mi, opts = {}) {
     for (const u of units) { const c = (um[u.Id] || [])[1] || 0; if (!u.WasRefunded) baseDeployed += c; if (u.DeathTime) baseLost += c; }
     const kSpawn = baseDeployed > 0 && num(p.TotalSpawnedUnitScore) > 0 ? Math.max(0.5, (num(p.TotalSpawnedUnitScore) - num(p.TotalRefundedUnitScore)) / baseDeployed) : 1;
     const kLoss = baseLost > 0 && num(p.LossesScore) > 0 ? num(p.LossesScore) / baseLost : kSpawn;
+    // 这个人平均每次击杀值多少击杀分（分配单位击杀分用）
+    const unitKills = units.reduce((s, u) => s + num(u.KilledCount), 0);
+    const dPerKill = unitKills > 0 ? num(p.DestructionScore) / unitKills : 0;
     let spent = 0, refundN = 0, deadN = 0, deployedN = 0, lostValue = 0;
     const lives = [];
     const mine = new Map();
@@ -70,7 +75,7 @@ function buildMatchReport(mi, opts = {}) {
       }
       // 按单位型号聚合（玩家内 / 队伍内）
       for (const [map, key] of [[mine, u.Id], [unitAgg, team + ':' + u.Id]]) {
-        const a = map.get(key) || { id: u.Id, name: e[2], role: e[0], country: e[3], team, count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [], users: new Set(), spent: 0, lost: 0 };
+        const a = map.get(key) || { id: u.Id, name: e[2], role: e[0], country: e[3], team, count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [], users: new Set(), spent: 0, lost: 0, destr: 0 };
         a.count++;
         if (!refunded) a.spent += cost;
         if (dead) a.lost += lossCost;
@@ -78,6 +83,7 @@ function buildMatchReport(mi, opts = {}) {
         if (dead) a.dead++;
         a.dmg += num(u.TotalDamageDealt);
         a.kills += num(u.KilledCount);
+        a.destr += num(u.KilledCount) * dPerKill;
         if (life != null) a.lives.push(life);
         a.users.add(p.Name || id);
         map.set(key, a);
@@ -101,6 +107,7 @@ function buildMatchReport(mi, opts = {}) {
       survival: deployedN ? Math.round(((deployedN - deadN) / deployedN) * 100) : null,
       lifeMedian: lives.length ? Math.round(median(lives)) : null,
       dmgPerCost: spent ? r2(num(p.DamageDealt) / spent) : null,
+      dPerCost: spent ? r2(num(p.DestructionScore) / spent) : null, // 每 1 点花费打出的击杀分（玩家级是精确值）
       supply: num(p.SupplyPointsConsumed), supplyFromAllies: num(p.SupplyPointsConsumedFromAllies), supplyByAllies: num(p.SupplyPointsConsumedByAllies),
       supplyCaptured: num(p.SupplyCaptured), supplyLostToEnemy: num(p.SupplyCapturedByEnemy), airdrop: num(p.SupplyAirdropped),
       ffDestroyed: num(p.DestructionFriendlyFireCost), ffLost: num(p.LossesByFriendlyFireScore),
@@ -180,6 +187,8 @@ function finishUnit(a) {
     lifeMedian: a.lives.length ? Math.round(median(a.lives)) : null,
     dmg: Math.round(a.dmg), kills: a.kills,
     dmgPerCost: spent ? r2(a.dmg / spent) : null,
+    destr: Math.round(a.destr), // 击杀分（估算）
+    destrPerCost: spent ? r2(a.destr / spent) : null,
     killsPer1k: spent ? r1((a.kills / spent) * 1000) : null,
     users: [...a.users]
   };
@@ -211,10 +220,10 @@ function insights(r) {
   }
   // 最赚、最亏的单位（出了至少 2 个；运输单位本来就不打伤害，不参与）
   const pool = r.units.filter((u) => u.role && u.deployed >= 2 && u.spent >= 300);
-  const best = [...pool].sort((a, b) => b.dmgPerCost - a.dmgPerCost)[0];
-  const worst = [...pool].filter((u) => u.deathRate >= 80).sort((a, b) => a.dmgPerCost - b.dmgPerCost)[0];
-  if (best) out.push({ kind: 'good', text: '最赚的单位：' + tn(best.team) + '的 ' + best.name + '（出了 ' + best.deployed + ' 个，每 1 点花费打出 ' + best.dmgPerCost + ' 伤害）' });
-  if (worst) out.push({ kind: 'bad', text: '最亏的单位：' + tn(worst.team) + '的 ' + worst.name + '（出了 ' + worst.deployed + ' 个、死了 ' + worst.dead + ' 个，每 1 点花费只打出 ' + worst.dmgPerCost + ' 伤害）' });
+  const best = [...pool].sort((a, b) => b.destrPerCost - a.destrPerCost)[0];
+  const worst = [...pool].filter((u) => u.deathRate >= 80).sort((a, b) => a.destrPerCost - b.destrPerCost)[0];
+  if (best) out.push({ kind: 'good', text: '最赚的单位：' + tn(best.team) + '的 ' + best.name + '（出了 ' + best.deployed + ' 个，每 1 点花费打出 ' + best.destrPerCost + ' 击杀分，估算）' });
+  if (worst) out.push({ kind: 'bad', text: '最亏的单位：' + tn(worst.team) + '的 ' + worst.name + '（出了 ' + worst.deployed + ' 个、死了 ' + worst.dead + ' 个，每 1 点花费只打出 ' + worst.destrPerCost + ' 击杀分，估算）' });
   for (const ev of r.timeline.events) if (ev.type === 'spike') out.push({ kind: 'neutral', text: '第 ' + (ev.min + 1) + ' 分钟 ' + tn(ev.team) + ev.text });
   return out;
 }

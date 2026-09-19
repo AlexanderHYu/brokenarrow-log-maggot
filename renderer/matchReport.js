@@ -13,6 +13,13 @@ const mrTeamName = (t) => (t === 0 ? 'A 队' : 'B 队');
 const mrFac = (f) => (f === 'RU' ? '俄' : f === 'US' ? '美' : '');
 const mrNum = (v) => (v == null ? '-' : Number(v).toLocaleString('zh-CN'));
 const mrPct = (v) => (v == null ? '-' : Math.round(v * 100) + '%');
+// 兵种构成条：条里只写百分比，窄到放不下的段悬停看；图例单独一行
+function mrRoleBar(roles, small) {
+  return `<div class="mr-rolebar${small ? ' small' : ''}">${Object.entries(roles).filter(([k, v]) => MR_ROLE[k] && v > 0).map(([k, v]) => `<i style="width:${v}%;background:${MR_ROLE_COLOR[k]}" title="${MR_ROLE[k]} ${v}%">${v >= 4 ? v + '%' : ''}</i>`).join('')}</div>`;
+}
+function mrRoleLegend() {
+  return '<div class="mr-legend">' + Object.keys(MR_ROLE).map((k) => `<span><i style="background:${MR_ROLE_COLOR[k]}"></i>${MR_ROLE[k]}</span>`).join('') + '</div>';
+}
 const mrSec = (s) => (s == null ? '-' : s >= 60 ? Math.floor(s / 60) + '′' + String(s % 60).padStart(2, '0') + '″' : s + '″');
 
 async function openMatchReport(fid) {
@@ -79,7 +86,6 @@ function mrOverview(r) {
       <span class="mr-cmp-b">${mrNum(b)}</span></div>`;
   };
   const surv = (T) => (T.unitsDeployed ? Math.round(((T.unitsDeployed - T.unitsDead) / T.unitsDeployed) * 100) : null);
-  const roleBar = (T) => `<div class="mr-rolebar">${Object.entries(T.roles).filter(([, v]) => v > 0).map(([k, v]) => `<i style="width:${v}%;background:${MR_ROLE_COLOR[k]}" title="${MR_ROLE[k]} ${v}%">${v >= 7 ? MR_ROLE[k] + ' ' + v + '%' : ''}</i>`).join('')}</div>`;
   const best = (key, fmt, lowIsBest) => {
     const ps = r.players.filter((p) => !p.afk && p[key] != null);
     const p = [...ps].sort((x, y) => (lowIsBest ? x[key] - y[key] : y[key] - x[key]))[0];
@@ -92,8 +98,9 @@ function mrOverview(r) {
       ${bar('单位存活率（%）', surv(A), surv(B))}
     </div>
     <div class="mr-sec"><h4>兵种构成（按出兵花费）</h4>
-      <div class="mr-roles"><span class="t0">${mrTeamName(0)}</span>${roleBar(A)}</div>
-      <div class="mr-roles"><span class="t1">${mrTeamName(1)}</span>${roleBar(B)}</div>
+      <div class="mr-roles"><span class="t0">${mrTeamName(0)}</span>${mrRoleBar(A.roles)}</div>
+      <div class="mr-roles"><span class="t1">${mrTeamName(1)}</span>${mrRoleBar(B.roles)}</div>
+      <div class="mr-roles"><span></span>${mrRoleLegend()}</div>
     </div>
     <div class="mr-sec"><h4>全场之最</h4>
       <div class="mr-bests">
@@ -102,7 +109,7 @@ function mrOverview(r) {
         <div>伤害最高：${best('dmg', mrNum)}</div>
         <div>出兵最多：${best('unitsDeployed', (v) => v + ' 个')}</div>
         <div>单位存活率最高：${best('survival', (v) => v + '%')}</div>
-        <div>每点花费伤害最高：${best('dmgPerCost', (v) => v)}</div>
+        <div>每点花费击杀分最高：${best('dPerCost', (v) => v)}</div>
         <div>补给消耗最多：${best('supply', mrNum)}</div>
         <div>占点最多：${best('obj', (v) => v)}</div>
       </div>
@@ -121,8 +128,8 @@ const MR_PCOLS = [
   ['dmg', '伤害 / 承伤', (p) => mrNum(p.dmg) + ' / ' + mrNum(p.dmgTaken)],
   ['spent', '出兵', (p) => p.unitsDeployed + ' 个 · ' + mrNum(p.spent)],
   ['survival', '存活率', (p) => (p.survival == null ? '-' : p.survival + '%')],
-  ['lifeMedian', '阵亡单位存活', (p) => mrSec(p.lifeMedian)],
-  ['dmgPerCost', '伤害/花费', (p) => p.dmgPerCost ?? '-'],
+  ['lifeMedian', '阵亡存活·中位', (p) => mrSec(p.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）'],
+  ['dPerCost', '击杀分/花费', (p) => p.dPerCost ?? '-'],
   ['supply', '补给', (p) => mrNum(p.supply)],
   ['obj', '占点', (p) => p.obj]
 ];
@@ -135,7 +142,7 @@ function mrSortList(list, s) {
 }
 function mrPlayers(r) {
   const s = mrSort.players;
-  const head = MR_PCOLS.map(([k, n]) => `<th data-sort="${k}" class="${s.key === k ? 'sorted' : ''}">${n}${s.key === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`).join('');
+  const head = MR_PCOLS.map(([k, n, , tip]) => `<th data-sort="${k}" class="${s.key === k ? 'sorted' : ''}"${tip ? ' title="' + tip + '"' : ''}>${n}${s.key === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`).join('');
   const table = (t) => {
     const T = r.teams[t];
     const rows = mrSortList(r.players.filter((p) => p.team === t), s).map((p) => `
@@ -147,7 +154,7 @@ function mrPlayers(r) {
   return `<div class="dim mr-hint">点表头排序，点一行展开这个人的单位明细；右键玩家可以调查羁绊</div>${table(r.winnerTeam === 1 ? 1 : 0)}${table(r.winnerTeam === 1 ? 0 : 1)}`;
 }
 function mrPlayerDetail(p) {
-  const roleBar = p.roles ? `<div class="mr-rolebar small">${Object.entries(p.roles).filter(([, v]) => v > 0).map(([k, v]) => `<i style="width:${v}%;background:${MR_ROLE_COLOR[k]}" title="${MR_ROLE[k]} ${v}%">${v >= 9 ? MR_ROLE[k] + ' ' + v + '%' : ''}</i>`).join('')}</div>` : '';
+  const roleBar = p.roles ? mrRoleBar(p.roles, true) + mrRoleLegend() : '';
   const parts = p.parts ? `<div class="mr-parts">
       <span>K/D 在同角色同分段里 <b>第 ${Math.round((p.parts.kd || 0) * 100)} 百分位</b></span>
       <span>摧毁贡献 <b>第 ${Math.round((p.parts.contrib || 0) * 100)} 百分位</b></span>
@@ -166,9 +173,9 @@ function mrPlayerDetail(p) {
     p.leftAtMin != null ? '第 ' + p.leftAtMin + ' 分钟离开' : '',
     p.exp ? '经验 ' + mrNum(p.exp) : ''
   ].filter(Boolean).map((t) => '<span>' + esc(t) + '</span>').join('');
-  const units = (p.units || []).map((u) => `<tr><td>${esc(u.name)}</td><td class="dim">${u.roleName}</td><td>${u.deployed}${u.refunded ? '<span class="dim">（退 ' + u.refunded + '）</span>' : ''}</td><td>${u.dead}</td><td>${u.deathRate == null ? '-' : u.deathRate + '%'}</td><td>${mrSec(u.lifeMedian)}</td><td>${mrNum(u.dmg)}</td><td>${u.kills}</td><td>${mrNum(u.spent)}</td></tr>`).join('');
+  const units = (p.units || []).map((u) => `<tr><td>${esc(u.name)}</td><td class="dim">${u.roleName}</td><td>${u.deployed}${u.refunded ? '<span class="dim">（退 ' + u.refunded + '）</span>' : ''}</td><td>${u.dead}</td><td>${u.deathRate == null ? '-' : u.deathRate + '%'}</td><td>${mrSec(u.lifeMedian)}</td><td>${mrNum(u.dmg)}</td><td>${u.kills}</td><td>${mrNum(u.destr)}</td><td>${mrNum(u.spent)}</td></tr>`).join('');
   return `${roleBar}${parts}<div class="mr-extra">${extra}</div>
-    <table class="mr-table mini"><thead><tr><th>单位</th><th>兵种</th><th>出兵</th><th>阵亡</th><th>死亡率</th><th>阵亡单位存活</th><th>伤害</th><th>击杀</th><th>花费</th></tr></thead><tbody>${units}</tbody></table>`;
+    <table class="mr-table mini"><thead><tr><th>单位</th><th>兵种</th><th>出兵</th><th>阵亡</th><th>死亡率</th><th title="已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）">阵亡存活·中位</th><th>伤害</th><th>击杀</th><th>击杀分（估）</th><th>花费</th></tr></thead><tbody>${units}</tbody></table>`;
 }
 function mrBindPlayers() {
   const body = $('mrTabBody');
@@ -188,10 +195,11 @@ const MR_UCOLS = [
   ['deployed', '出兵', (u) => u.deployed + (u.refunded ? '<span class="dim">（退 ' + u.refunded + '）</span>' : '')],
   ['cost', '均价', (u) => mrNum(u.cost)],
   ['deathRate', '死亡率', (u) => (u.deathRate == null ? '-' : `<span class="${u.deathRate >= 80 ? 'loss' : u.deathRate <= 30 ? 'win' : ''}">${u.deathRate}%</span>`)],
-  ['lifeMedian', '阵亡单位存活', (u) => mrSec(u.lifeMedian)],
+  ['lifeMedian', '阵亡存活·中位', (u) => mrSec(u.lifeMedian), '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和退款的不算）'],
   ['dmg', '伤害', (u) => mrNum(u.dmg)],
   ['kills', '击杀', (u) => u.kills],
-  ['dmgPerCost', '伤害/花费', (u) => u.dmgPerCost ?? '-'],
+  ['destr', '击杀分（估）', (u) => mrNum(u.destr)],
+  ['destrPerCost', '击杀分/花费', (u) => u.destrPerCost ?? '-'],
   ['users', '使用者', (u) => `<span class="dim">${esc(u.users.join('、'))}</span>`]
 ];
 function mrUnits(r) {
@@ -199,10 +207,10 @@ function mrUnits(r) {
   const list = r.units.filter((u) => mrUnitTeam === 'all' || String(u.team) === mrUnitTeam)
     .map((u) => ({ ...u, usage: Math.round((u.spent / teamSpent[u.team]) * 1000) / 10 }));
   const s = mrSort.units;
-  const head = MR_UCOLS.map(([k, n]) => `<th data-sort="${k}" class="${s.key === k ? 'sorted' : ''}">${n}${s.key === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`).join('');
+  const head = MR_UCOLS.map(([k, n, , tip]) => `<th data-sort="${k}" class="${s.key === k ? 'sorted' : ''}"${tip ? ' title="' + tip + '"' : ''}>${n}${s.key === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`).join('');
   const rows = mrSortList(list, s).map((u) => `<tr>${MR_UCOLS.map(([, , f]) => `<td>${f(u)}</td>`).join('')}</tr>`).join('');
   const filt = [['all', '全部'], ['0', 'A 队'], ['1', 'B 队']].map(([k, n]) => `<button type="button" class="mr-tab small${mrUnitTeam === k ? ' active' : ''}" data-uteam="${k}">${n}</button>`).join('');
-  return `<div class="mr-filter">${filt}<span class="dim mr-hint">使用率 = 这个单位的花费占本队出兵花费的比例；死亡率 = 阵亡 ÷ 出兵（退款的不算）；伤害/花费越高越赚</span></div>
+  return `<div class="mr-filter">${filt}<span class="dim mr-hint">使用率 = 这个单位的花费占本队出兵花费的比例；死亡率 = 阵亡 ÷ 出兵（退款的不算）；击杀分/花费越高越赚；单位的击杀分是把这个人的总击杀分按各单位击杀数分下去的估算</span></div>
     <div class="mr-scroll"><table class="mr-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function mrBindUnits() {

@@ -854,6 +854,15 @@ const BATRACE_URL = 'https://app.batrace.top/';
 const MAGGOT_SITE_URL = 'https://github.com/Zawinzala/Broken-Arrow-Maggot';
 
 function openLink(url) { if (url) BA.openExternal(url); }
+// 新版本提醒横幅（关掉后本次运行不再弹同一个版本）
+let updateUrl = null, updateDismissed = null;
+function showUpdate(info) {
+  if (!info || !info.version || updateDismissed === info.version) return;
+  updateUrl = info.url;
+  $('updateText').textContent = '🆕 有新版本 v' + info.version + '（当前 v' + info.current + '）。安装版直接运行新的 Setup 覆盖安装；免安装版换成新的 exe 即可，设置和档案都会保留。';
+  $('updateBanner').classList.remove('hidden');
+  $('updateBanner').dataset.version = info.version;
+}
 
 const PLAYER_URL = (id) => `https://app.batrace.top/player/${id}`;
 const MATCH_URL = (id) => `https://app.batrace.top/match/${id}`;
@@ -1805,6 +1814,8 @@ function bindUI() {
     if (!lastReport) { setStatus(I18N.t('dev.needSearchFirst'), false); return; }
     runDragon(lastReport.id, lastReport.name);
   });
+  on('btnUpdateOpen', 'click', () => openLink(updateUrl));
+  on('btnUpdateClose', 'click', () => { const b = $('updateBanner'); updateDismissed = b.dataset.version || null; b.classList.add('hidden'); });
   on('btnBatraceGateClose', 'click', () => { const b = $('batraceGateBanner'); if (b) b.classList.add('hidden'); });
   const link = (id, url) => { const el = $(id); if (el) el.addEventListener('click', (e) => { e.preventDefault(); openLink(url); }); };
   link('linkBatrace', BATRACE_URL);
@@ -2183,6 +2194,8 @@ async function init() {
     if (card && card.dataset.id) loadReport(card.dataset.id, card.dataset.name);
   });
   BA.getVersion().then(renderVersion).catch(() => {});
+  if (BA.onUpdateAvailable) BA.onUpdateAvailable(showUpdate);
+  if (BA.getUpdateInfo) BA.getUpdateInfo().then(showUpdate).catch(() => {});
 }
 
 // 兜底：任何异步错误都显示出来，而不是“点了没反应”
