@@ -1,5 +1,21 @@
 # 🐛 断箭蛆工具 byZola（Broken Arrow Log Assistant）
 
+> ## 🐉 已经搬家：新仓库 [ba-dragon](https://github.com/AlexanderHYu/ba-dragon)
+>
+> 这个工具已经从零重写，新仓库是 **[AlexanderHYu/ba-dragon](https://github.com/AlexanderHYu/ba-dragon)**，
+> 最新版请到 [那边的 Releases](https://github.com/AlexanderHYu/ba-dragon/releases/latest) 下载（推荐安装版）。
+>
+> **正在用 4.0.x 的朋友请注意**：新版的版本号从 1.0.0 重新起算，比 4.0.3 小，
+> 所以你手上这个版本的自动更新**不会**提示你升级 —— 这一次要手动下载安装一遍。
+> 新版用的是同一个数据目录，装上直接覆盖，**设置和对局档案都会保留**
+> （对局档案、玩家库、ELO 记录会自动迁移过去）。装完之后由新仓库的自动更新接手，以后还是自动的。
+>
+> 这个仓库不再更新，留档用。
+>
+> *Moved to **[ba-dragon](https://github.com/AlexanderHYu/ba-dragon)*** — get the latest release there.
+> If you run 4.0.x, the new version numbering restarts at 1.0.0, so auto-update will not offer it:
+> install once manually. Same data directory, your settings and match archive are kept.
+
 [中文](#中文) · [English](#english) · [日本語](#日本語) · [Русский](#русский)
 
 ---
