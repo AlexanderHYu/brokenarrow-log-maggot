@@ -12,7 +12,7 @@
 >
 > 这个仓库不再更新，留档用。
 >
-> *Moved to **[ba-dragon](https://github.com/AlexanderHYu/ba-dragon)*** — get the latest release there.
+> **Moved to [ba-dragon](https://github.com/AlexanderHYu/ba-dragon)** — get the latest release there.
 > If you run 4.0.x, the new version numbering restarts at 1.0.0, so auto-update will not offer it:
 > install once manually. Same data directory, your settings and match archive are kept.
 
